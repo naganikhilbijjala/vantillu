@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-Project context for Claude Code. Read this before any task in this repo.
-
 ## What this app is
 
 Vantillu is a local-first cooking log for a single user. It answers one question:
@@ -41,26 +39,33 @@ anything on iOS.
 
 ## Domain vocabulary
 
-Dishes have a **role**: `tiffin`, `dal`, `dry_curry`, `gravy`, `rice`, `pachadi`, `podi`,
-`accompaniment`, `snack`, `sweet`. `role` is unconstrained TEXT — seeded with defaults,
-editable later. Don't add a CHECK constraint.
+Dishes have a **role**: `staple`, `tiffin`, `dal`, `dry_curry`, `gravy`, `one_pot`,
+`pachadi`, `podi`, `accompaniment`, `snack`, `sweet`. `role` is unconstrained TEXT —
+seeded with defaults, editable later. Don't add a CHECK constraint.
 
-- `podi` and `accompaniment` are **always available**. Never suggested, never stale,
-  excluded from scoring entirely.
+- `staple` (plain rice, chapati) and `one_pot` (pulihora, biryani) are **distinct roles**.
+  Don't merge them into a `rice` role — the leftover-rice boost fires from `staple` and
+  lands on `one_pot`.
+- `podi` and `accompaniment` are **always available**: never suggested, never stale,
+  excluded from scoring entirely. This is driven by an `isAlwaysAvailable` flag in
+  `role_config`, **never by testing for those two role strings** — roles are renameable.
 - **Tiffin is valid for breakfast AND dinner.** This is why `dish_slot` is many-to-many.
   Do not collapse it to a single column.
-- `prepLeadHours` + `prepLabel` generalise soaking, fermenting, and marinating. A dish
-  with `prepLeadHours` and no matching live `prepState` row is **hard-excluded** from
-  suggestions — suggesting dosa with no batter is worse than suggesting nothing.
-- `usesLeftoverRice` dishes get a boost when a rice staple was logged in the last 24h.
+- `prepKind` + `prepLeadHours` + `prepLabel` generalise soaking, fermenting, and
+  marinating. Live prep is matched on `(prepKind, primaryIngredient)`, so one batter row
+  covers idli/dosa/uttapam but not pesarattu. A dish with `prepKind` and no matching live
+  `prepState` row is **hard-excluded** — suggesting dosa with no batter is worse than
+  suggesting nothing.
+- `usesLeftoverRice` dishes get a boost when a rice staple — `role='staple'` **and**
+  `primaryIngredient='rice'` — was logged in the last 24h.
 
 ### Three distinct kinds of note — keep them separate
 
-| Field | Lives on | Changes |
-|---|---|---|
-| `ingredientsText` / `methodText` | `dish` | rarely |
-| `notes` | `dish` | rarely |
-| `tweakNote` | `cookEvent` | every cook |
+| Field                            | Lives on    | Changes    |
+| -------------------------------- | ----------- | ---------- |
+| `ingredientsText` / `methodText` | `dish`      | rarely     |
+| `notes`                          | `dish`      | rarely     |
+| `tweakNote`                      | `cookEvent` | every cook |
 
 `tweakNote` is per-event on purpose. The chronological sequence of tweaks is what
 becomes the user's real recipe. Never fold them into the dish record.
@@ -68,6 +73,8 @@ becomes the user's real recipe. Never fold them into the dish record.
 ## Suggestion logic
 
 Hard filters first, then weighted score. Both live in `src/core/scoring.ts`.
+**`docs/SPEC.md` is authoritative for every threshold, weight, and time window** — this
+section is the summary, not the source.
 
 Filters: archived · always-available roles · wrong slot · effort over slot budget ·
 prep not ready · non-veg on a veg-only day.
@@ -75,6 +82,10 @@ prep not ready · non-veg on a veg-only day.
 Score: staleness ratio, plus bonuses for effort fit, leftover rice, expiring prep, and
 season match; minus 4.0 if the primary ingredient was used in the last 2 days, minus 2.0
 if the role was filled by a batch cook, minus 1.5 if last rated 1.
+
+Effort comparisons use the fixed rank table in `docs/SPEC.md` §1.2. Never rank effort by
+its position in a budget array — `indexOf` returns `-1` for an effort outside the budget,
+which silently reads as "very quick".
 
 **Every suggestion shown in the UI must display its dominant reason as a chip.** A
 suggestion without a stated reason gets ignored. When the engine excludes something the

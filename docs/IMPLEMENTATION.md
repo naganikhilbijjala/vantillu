@@ -6,6 +6,11 @@ and iOS from one codebase. Android ships first.
 This document is the build plan. Work through the phases in order; each one ends in a
 commit that leaves the app runnable.
 
+> **`docs/SPEC.md` supersedes this file on product decisions** — roles, weights, windows,
+> thresholds, and the prep model. The code snippets below are illustrative sketches, and
+> three of them are now known to be wrong; each is flagged inline. Read the SPEC before
+> copying any snippet from §4 or §5.
+
 ---
 
 ## 1. Stack
@@ -70,6 +75,14 @@ npm i date-fns
 npm i -D vitest @biomejs/biome
 npx biome init
 ```
+
+Two more are missing (`docs/SPEC.md` §13). **`expo-crypto` is needed in Phase 1** — every
+primary key is now a `randomUUID()`, so the schema depends on it. `expo-image-picker` can
+wait for Phase 6.
+
+The scaffold command above assumes an empty parent directory. This repo *is* `vantillu`
+and already holds `CLAUDE.md`, `docs/`, and `assets/` — scaffold into a temp directory and
+copy the app files in, or use `npx create-expo-app@latest .` and keep the existing files.
 
 ### The three config files Drizzle needs
 
@@ -152,10 +165,14 @@ vantillu/
 │   ├── hooks/
 │   └── theme/tokens.ts
 ├── drizzle/                      # generated migrations — commit these
-├── assets/seed_dishes.json
+├── assets/
+│   └── seed_dishes.json
 ├── __tests__/                    # vitest, targets src/core only
-├── CLAUDE.md
-└── docs/SPEC.md
+├── CLAUDE.md                     # conventions — loaded every session
+└── docs/
+    ├── SPEC.md                   # product decisions — authoritative
+    ├── IMPLEMENTATION.md         # this file
+    └── vantillu-mockup.html      # visual reference + scoring sketch
 ```
 
 ### The one architectural rule that matters
@@ -172,6 +189,30 @@ import `expo-sqlite` into `core/`, the function belongs in `db/queries/` instead
 Changes from the earlier draft: `prep` enum replaced by `prep_lead_hours` + `prep_label`
 (generalises soaking, fermenting, marinating, thawing), recipe fields added, `role` is
 unconstrained text.
+
+> **Amendments required in Phase 1.** The snippet below is out of date in five ways. All
+> of them land in Phase 1 so that no later migration is needed.
+>
+> *Correctness — without these, `isEligible`'s `livePrep` check cannot be computed at all,
+> because `prep_state` as drafted has no link to any dish (`docs/SPEC.md` §5.1):*
+>
+> - add `dish.prep_kind` — TEXT nullable: `batter` | `soaked` | `marinated`
+> - add `prep_state.ingredient` — TEXT nullable; live prep matches on the
+>   `(kind, ingredient)` pair
+> - add a `role_config` table — `role` PK, `label`, `is_always_available`, `sort_order`
+>
+> *Future-proofing — cheap now, expensive to retrofit (`docs/SPEC.md` §11). Multi-user is
+> **not** in scope; these only keep the door open:*
+>
+> - **every `id` becomes `text('id').primaryKey()`** holding a v4 UUID from `expo-crypto`,
+>   not `integer().primaryKey({ autoIncrement: true })`. Two devices would otherwise both
+>   mint `dish.id = 7`.
+> - **every table gains `updated_at` and `deleted_at`** (TEXT, local ISO; `deleted_at`
+>   nullable). Deletes are soft, queries filter `deleted_at IS NULL`. Added later, every
+>   pre-existing deletion is unrecoverable.
+>
+> Also: `cooked_at` stores a full **local** ISO datetime, not a date-only string
+> (`docs/SPEC.md` §2.1).
 
 ```ts
 // src/db/schema.ts
@@ -298,6 +339,17 @@ export function score(d: Candidate, ctx: Context): number {
 **Keep the random jitter out of `score()`.** Apply it in the caller, or the function
 stops being deterministic and can't be unit tested.
 
+> **Two bugs in the sketch above** (`docs/SPEC.md` §1.1, §4.4):
+>
+> 1. `d.role === 'podi' || d.role === 'accompaniment'` hard-codes role names that the user
+>    can rename. Use `d.isAlwaysAvailable`, resolved from `role_config` by the query layer.
+> 2. `ctx.budget.indexOf(d.effort) < 2` depends on budget arrays being sorted ascending,
+>    and returns `-1` — also `< 2` — for an effort outside the budget, so an ineligible
+>    dish collects the bonus. Use `effortRank(d.effort) <= 1` against the fixed rank table.
+>
+> Both need a regression test in Phase 2, including one that calls `score()` on a
+> candidate that fails `isEligible()`.
+
 ### Tests that must exist
 
 ```
@@ -310,7 +362,14 @@ score: primary ingredient cooked yesterday ranks below a stale dish
 score: identical inputs → identical output (deterministic)
 ```
 
-That last one catches the jitter mistake.
+That last one catches the jitter mistake. Four more, added by `docs/SPEC.md`:
+
+```
+medianInterval: median of 0 (two cooks same day) → treated as unknown, no divide-by-zero
+medianInterval: isEstimated events excluded from interval math, counted in daysSince
+isEligible: always-available role excluded via the flag, not via a role string
+score: called on a candidate that fails isEligible → no effort-fit bonus
+```
 
 ---
 
@@ -367,7 +426,10 @@ usual slot. Manage `prepState` lifecycle: created, ready, expired.
 **Done when:** a 9pm soak reminder fires for an overdue dish that needs one.
 
 ### Phase 10 — export/import
-JSON export via `expo-sharing`, import via `expo-document-picker`. Round-trip must be lossless.
+JSON export via `expo-sharing`, import via `expo-document-picker`. See `docs/SPEC.md` §10:
+the export is a **versioned envelope**, a WAL checkpoint runs first, import is replace-all
+behind a confirmation, tombstones ship with the data, and photos are references — text
+round-trips losslessly, photo URIs will dangle after a device move, and the UI says so.
 **Done when:** export, wipe the app, import, and every gauge reads the same as before.
 
 ### Phase 11 — Insights
