@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vantillu — mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --steel-0:#E4E8E7; --steel-1:#F6F8F7; --steel-2:#FBFCFC;
+  --line:#CBD2D0; --line-soft:#DDE3E1;
+  --ink:#151B19; --ink-2:#5A6663; --ink-3:#8C9794;
+  --turmeric:#BE8E17; --turmeric-bg:#F7EED6;
+  --gongura:#A32E1C; --gongura-bg:#F8E5E1;
+  --curry:#33604A; --curry-bg:#DFEBE3;
+  --sans:'Familjen Grotesk',system-ui,sans-serif;
+  --mono:'DM Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:var(--sans); background:var(--steel-0);
+  background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.5) 0 1px,transparent 1px 3px);
+  color:var(--ink); min-height:100vh;
+  display:flex;flex-direction:column;align-items:center; padding:40px 20px 64px;
+  -webkit-font-smoothing:antialiased;
+}
+.brief{max-width:390px;width:100%;margin-bottom:28px}
+.brief h1{font-size:20px;font-weight:600;letter-spacing:-.015em}
+.brief p{font-size:13px;color:var(--ink-2);margin-top:6px;line-height:1.55}
+.phone{
+  width:390px;height:812px; background:var(--steel-2);
+  border:1px solid var(--line); border-radius:34px; overflow:hidden;
+  position:relative; display:flex;flex-direction:column;
+  box-shadow:0 1px 0 #fff inset, 0 18px 40px -20px rgba(21,27,25,.28);
+}
+.status{height:34px;flex:0 0 34px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.scroll{flex:1;overflow-y:auto;overscroll-behavior:contain}
+.scroll::-webkit-scrollbar{width:0}
+
+.hd{padding:10px 20px 16px}
+.hd .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+.hd h2{font-size:25px;font-weight:600;letter-spacing:-.02em;margin-top:3px;line-height:1.12}
+
+.slots{display:flex;gap:6px;padding:0 20px 14px}
+.slot{flex:1;border:1px solid var(--line-soft);background:transparent;border-radius:7px;padding:7px 0;font-family:var(--sans);font-size:12px;color:var(--ink-2);cursor:pointer;transition:background .13s,color .13s,border-color .13s}
+.slot:hover{border-color:var(--line)}
+.slot[aria-pressed="true"]{background:var(--ink);color:var(--steel-2);border-color:var(--ink)}
+.slot:focus-visible,.rf:focus-visible,.card:focus-visible,.ghost:focus-visible,.li:focus-visible{outline:2px solid var(--turmeric);outline-offset:2px}
+
+.banner{margin:0 20px 16px;padding:11px 13px;background:var(--curry-bg);border-left:2px solid var(--curry);display:flex;gap:10px;align-items:flex-start}
+.banner .dot{width:6px;height:6px;border-radius:50%;background:var(--curry);margin-top:5px;flex:0 0 6px}
+.banner p{font-size:12.5px;color:#244634;line-height:1.45}
+.banner b{font-weight:500}
+
+.cards{padding:0 20px;display:flex;flex-direction:column;gap:9px}
+.card{background:var(--steel-1);border:1px solid var(--line-soft);border-radius:11px;padding:13px 14px 12px;cursor:pointer;transition:border-color .13s,background .13s;text-align:left;width:100%;font-family:inherit}
+.card:hover{border-color:var(--line);background:var(--steel-2)}
+.card .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.card .nm{font-size:16.5px;font-weight:500;letter-spacing:-.01em}
+.card .sub{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:3px;letter-spacing:.02em}
+.card .mins{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);white-space:nowrap;flex:0 0 auto}
+
+.gauge{margin-top:11px;position:relative;height:3px;background:var(--line-soft);border-radius:2px}
+.gauge i{position:absolute;left:0;top:0;height:3px;border-radius:2px;display:block}
+.gauge .due{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--ink-3);left:71.4%}
+.chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+.chip{font-size:11px;padding:3px 8px;border-radius:20px;white-space:nowrap}
+.c-t{background:var(--turmeric-bg);color:#6E520A}
+.c-g{background:var(--gongura-bg);color:var(--gongura)}
+.c-c{background:var(--curry-bg);color:#244634}
+.c-n{background:var(--steel-0);color:var(--ink-2)}
+
+.ghost{margin:14px 20px 0;width:calc(100% - 40px);border:1px solid var(--line-soft);background:transparent;border-radius:8px;padding:10px;font-family:var(--sans);font-size:13px;color:var(--ink-2);cursor:pointer}
+.ghost:hover{border-color:var(--line);background:var(--steel-1)}
+
+.fab{position:absolute;right:18px;bottom:80px;z-index:5;width:52px;height:52px;border-radius:50%;background:var(--ink);color:var(--steel-2);border:none;cursor:pointer;font-size:23px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px -6px rgba(21,27,25,.55)}
+.fab:focus-visible{outline:2px solid var(--turmeric);outline-offset:3px}
+
+.nav{flex:0 0 62px;display:flex;border-top:1px solid var(--line-soft);background:var(--steel-1)}
+.nav button{flex:1;border:none;background:none;cursor:pointer;font-family:var(--sans);font-size:10.5px;color:var(--ink-3);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0}
+.nav button[aria-current="page"]{color:var(--ink)}
+.nav button:focus-visible{outline:2px solid var(--turmeric);outline-offset:-3px}
+.nav svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+.rowfilters{display:flex;gap:6px;padding:0 20px 14px;overflow-x:auto}
+.rowfilters::-webkit-scrollbar{height:0}
+.rf{border:1px solid var(--line-soft);background:transparent;border-radius:20px;padding:5px 11px;font-family:var(--sans);font-size:12px;color:var(--ink-2);white-space:nowrap;cursor:pointer}
+.rf[aria-pressed="true"]{background:var(--ink);color:var(--steel-2);border-color:var(--ink)}
+
+.list{padding:0 20px}
+.li{display:flex;gap:13px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line-soft);width:100%;background:none;border-left:none;border-right:none;border-top:none;font-family:inherit;text-align:left;cursor:pointer}
+.li:hover .nm{text-decoration:underline;text-underline-offset:3px}
+.li .body{flex:1;min-width:0}
+.li .nm{font-size:14.5px;font-weight:500}
+.li .meta{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:4px}
+.li .doc{color:var(--curry);font-size:10.5px}
+.li .vg{width:56px;flex:0 0 56px}
+.li .vg .gauge{margin-top:0}
+.li .num{font-family:var(--mono);font-size:12px;text-align:right;flex:0 0 46px}
+
+.back{display:flex;align-items:center;gap:7px;padding:8px 20px 4px;background:none;border:none;font-family:var(--sans);font-size:12.5px;color:var(--ink-2);cursor:pointer}
+.back:focus-visible{outline:2px solid var(--turmeric);outline-offset:2px}
+.back svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.sect{padding:6px 20px 0}
+.sect h3{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:400;margin-bottom:10px;margin-top:22px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:var(--steel-1);border-radius:9px;padding:11px 12px}
+.stat .k{font-size:11.5px;color:var(--ink-2)}
+.stat .v{font-family:var(--mono);font-size:21px;margin-top:3px;letter-spacing:-.02em}
+.stat .v small{font-size:12px;color:var(--ink-3)}
+
+.rx{font-size:13.5px;line-height:1.62;color:var(--ink)}
+.rx ul{margin:0 0 0 17px}
+.rx li{margin-bottom:3px}
+.rx p{margin-bottom:9px}
+.empty{border:1px dashed var(--line);border-radius:9px;padding:14px;text-align:center}
+.empty p{font-size:12.5px;color:var(--ink-2);line-height:1.5;margin-bottom:10px}
+.smallbtn{border:1px solid var(--line);background:var(--steel-1);border-radius:7px;padding:7px 13px;font-family:var(--sans);font-size:12.5px;color:var(--ink);cursor:pointer}
+.smallbtn:hover{background:var(--steel-2)}
+.smallbtn:focus-visible{outline:2px solid var(--turmeric);outline-offset:2px}
+
+.tl{border-left:1px solid var(--line-soft);padding-left:15px;margin-left:3px}
+.tl .ev{position:relative;padding-bottom:17px}
+.tl .ev:last-child{padding-bottom:4px}
+.tl .ev::before{content:'';position:absolute;left:-19px;top:5px;width:6px;height:6px;border-radius:50%;background:var(--line)}
+.tl .ev.good::before{background:var(--curry)}
+.tl .ev.bad::before{background:var(--gongura)}
+.tl .d{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);letter-spacing:.03em}
+.tl .tx{font-size:13px;line-height:1.55;margin-top:3px}
+.tl .none{font-size:12.5px;color:var(--ink-3);margin-top:2px;font-style:italic}
+
+.bar{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.bar .bl{font-size:12.5px;width:82px;flex:0 0 82px;color:var(--ink-2)}
+.bar .bt{flex:1;height:16px;background:var(--steel-0);border-radius:3px;overflow:hidden}
+.bar .bt i{display:block;height:16px;background:var(--turmeric);opacity:.75}
+.bar .bn{font-family:var(--mono);font-size:11px;color:var(--ink-3);width:20px;text-align:right}
+.note{font-size:12.5px;color:var(--ink-2);line-height:1.55;background:var(--turmeric-bg);padding:11px 12px;border-radius:9px}
+
+.sheet{position:absolute;inset:0;z-index:20;display:none;background:rgba(21,27,25,.4)}
+.sheet.open{display:block}
+.sheetInner{position:absolute;left:0;right:0;bottom:0;background:var(--steel-2);border-radius:18px 18px 0 0;padding:8px 20px 22px;max-height:90%;overflow-y:auto}
+.grab{width:34px;height:3px;background:var(--line);border-radius:2px;margin:0 auto 16px}
+.sheetInner h3{font-size:18px;font-weight:600;margin-bottom:16px;letter-spacing:-.01em}
+.fld{margin-bottom:17px}
+.fld label{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;border:1px solid var(--line-soft);background:transparent;border-radius:7px;padding:9px 0;font-family:var(--sans);font-size:12.5px;color:var(--ink-2);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--steel-2);border-color:var(--ink)}
+.seg button:focus-visible{outline:2px solid var(--turmeric);outline-offset:2px}
+.ti{width:100%;border:1px solid var(--line-soft);border-radius:7px;padding:10px 11px;font-family:var(--sans);font-size:13.5px;color:var(--ink);background:var(--steel-1);resize:vertical}
+.ti::placeholder{color:var(--ink-3)}
+.ti:focus{outline:2px solid var(--turmeric);border-color:transparent}
+.mic{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11.5px;color:var(--ink-3)}
+.prim{width:100%;background:var(--ink);color:var(--steel-2);border:none;border-radius:8px;padding:13px;font-family:var(--sans);font-size:14.5px;font-weight:500;cursor:pointer;margin-top:4px}
+.prim:focus-visible{outline:2px solid var(--turmeric);outline-offset:2px}
+.lnk{width:100%;background:none;border:none;color:var(--ink-2);font-family:var(--sans);font-size:12.5px;padding:12px 0 2px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+.toast{position:absolute;left:20px;right:20px;bottom:76px;z-index:30;background:var(--ink);color:var(--steel-2);border-radius:9px;padding:12px 14px;font-size:13px;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .2s,transform .2s}
+.toast.show{opacity:1;transform:translateY(0)}
+
+.legend{max-width:390px;width:100%;margin-top:26px;font-size:12.5px;color:var(--ink-2);line-height:1.6}
+.legend h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:400;margin-bottom:8px}
+.legend li{margin-left:16px;margin-bottom:5px}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:430px){
+  body{padding:20px 8px 40px}
+  .phone{width:100%;height:760px;border-radius:26px}
+  .brief,.legend{max-width:100%}
+}
+</style>
+</head>
+<body>
+
+<div class="brief">
+  <h1>Vantillu</h1>
+  <p>Tap meal slots to re-rank suggestions. Open <b>Dishes</b> and tap any row for the detail screen — that's where recipes and the note timeline live. Scoring runs live.</p>
+</div>
+
+<div class="phone">
+  <div class="status"><span>9:41</span><span>Sat 25 Jul</span></div>
+  <div class="scroll" id="scroll"></div>
+  <button class="fab" id="fab" aria-label="Log a dish">+</button>
+  <div class="sheet" id="sheet"><div class="sheetInner" id="sheetInner"></div></div>
+  <div class="toast" id="toast"></div>
+  <nav class="nav" id="nav">
+    <button data-tab="today" aria-current="page"><svg viewBox="0 0 24 24"><path d="M3 11h18M6 11V7a6 6 0 0112 0v4M4 15h16l-1 5H5z"/></svg>Today</button>
+    <button data-tab="dishes"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Dishes</button>
+    <button data-tab="insights"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Insights</button>
+  </nav>
+</div>
+
+<div class="legend">
+  <h4>Reading the gauge</h4>
+  <ul>
+    <li>The bar fills toward your own median interval. The hairline is "due".</li>
+    <li>Turmeric = not due yet. Red = past due, overflowing the line.</li>
+    <li>Under three cooks, the bar is hollow — no median is invented.</li>
+  </ul>
+</div>
+
+<script>
+const D=[
+ {n:'Stuffed brinjal curry',alt:'Gutti vankaya',role:'gravy',ing:'brinjal',eff:'project',m:50,days:24,med:18,cooks:9,slots:['lunch'],
+  rx:{ing:['6 small brinjals','3 tbsp peanut–sesame powder','1 tsp tamarind paste','Jaggery, small piece'],
+      me:'Slit brinjals in a cross, keeping the stem. Stuff with the dry masala. Shallow fry covered on low heat, turning gently. Add tamarind water and jaggery in the last ten minutes.'},
+  notes:'Amma stuffs these the night before and they hold fine in the fridge.',
+  ev:[{d:'1 Jul',r:3,t:'Low heat the whole way is the trick. No burnt patches this time.'},
+      {d:'9 Jun',r:2,t:'Stuffing fell out — slit them less deep.'},
+      {d:'21 May',r:2,t:null},
+      {d:'2 May',r:1,t:'Too much tamarind, went sour. Half next time.'}]},
+ {n:'Moong dal dosa',alt:'Pesarattu',role:'tiffin',ing:'moong dal',eff:'medium',m:25,days:19,med:11,cooks:14,slots:['breakfast','dinner'],prep:'soak',
+  rx:{ing:['1 cup whole green moong, soaked 6 hrs','1 inch ginger','2 green chillies','Rice flour, 2 tbsp'],
+      me:'Grind soaked moong with ginger and chilli to a coarse batter. Do not ferment. Add rice flour for crispness. Spread thin on a hot tawa, top with onion and cumin.'},
+  ev:[{d:'6 Jul',r:3,t:'Rice flour makes a real difference to crispness.'},
+      {d:'24 Jun',r:2,t:'Batter too thick, spread badly.'}]},
+ {n:'Dosa',alt:null,role:'tiffin',ing:'urad dal',eff:'quick',m:20,days:8,med:6,cooks:31,slots:['breakfast','dinner'],prep:'ferment',
+  ev:[{d:'17 Jul',r:2,t:null},{d:'11 Jul',r:3,t:'Batter fermented 11 hrs — best texture yet.'}]},
+ {n:'Idli',alt:null,role:'tiffin',ing:'urad dal',eff:'quick',m:20,days:12,med:9,cooks:22,slots:['breakfast','dinner'],prep:'ferment'},
+ {n:'Upma',alt:null,role:'tiffin',ing:'semolina',eff:'quick',m:20,days:4,med:7,cooks:19,slots:['breakfast','dinner']},
+ {n:'Poha',alt:null,role:'tiffin',ing:'flattened rice',eff:'quick',m:15,days:16,med:10,cooks:12,slots:['breakfast']},
+ {n:'Ven pongal',alt:null,role:'tiffin',ing:'moong dal',eff:'medium',m:30,days:31,med:20,cooks:6,slots:['breakfast']},
+ {n:'Tamarind rice',alt:'Pulihora',role:'rice',ing:'tamarind',eff:'quick',m:20,days:13,med:14,cooks:17,slots:['breakfast','lunch','dinner'],rice:1,
+  rx:{ing:['3 cups cooked rice, cooled','Thick tamarind extract, 1/2 cup','Mustard, chana dal, peanuts','Turmeric, dry red chilli'],
+      me:'Cook the tamarind paste down with turmeric until it thickens and the oil separates. Cool fully. Fold into cold rice — never warm rice, it turns mushy.'},
+  notes:'Better the next day. Travels well.',
+  ev:[{d:'12 Jul',r:3,t:'Cold rice is non-negotiable. Warm rice ruined it in May.'}]},
+ {n:'Egg fried rice',alt:null,role:'rice',ing:'egg',eff:'quick',m:15,days:6,med:9,cooks:15,slots:['lunch','dinner'],rice:1,veg:0},
+ {n:'Curd rice',alt:null,role:'rice',ing:'curd',eff:'instant',m:10,days:3,med:5,cooks:26,slots:['lunch','dinner'],rice:1},
+ {n:'Lemon rice',alt:null,role:'rice',ing:'lemon',eff:'quick',m:15,days:22,med:15,cooks:11,slots:['breakfast','lunch','dinner'],rice:1},
+ {n:'Chicken biryani',alt:null,role:'rice',ing:'chicken',eff:'project',m:90,days:26,med:21,cooks:8,slots:['lunch','dinner'],veg:0},
+ {n:'Tomato dal',alt:'Tomato pappu',role:'dal',ing:'tomato',eff:'medium',m:25,days:2,med:6,cooks:28,slots:['lunch','dinner']},
+ {n:'Spinach dal',alt:'Palakura pappu',role:'dal',ing:'spinach',eff:'medium',m:30,days:17,med:12,cooks:13,slots:['lunch']},
+ {n:'Sambar',alt:null,role:'dal',ing:'toor dal',eff:'medium',m:35,days:9,med:8,cooks:24,slots:['breakfast','lunch','dinner']},
+ {n:'Aloo fry',alt:null,role:'dry',ing:'potato',eff:'medium',m:25,days:1,med:7,cooks:30,slots:['lunch','dinner']},
+ {n:'Bhindi fry',alt:'Bendakaya vepudu',role:'dry',ing:'okra',eff:'medium',m:30,days:11,med:10,cooks:18,slots:['lunch','dinner'],
+  notes:'Do not cover the pan or it goes slimy.'},
+ {n:'Cabbage poriyal',alt:null,role:'dry',ing:'cabbage',eff:'quick',m:20,days:15,med:13,cooks:10,slots:['lunch','dinner']},
+ {n:'Ivy gourd fry',alt:'Dondakaya vepudu',role:'dry',ing:'ivy gourd',eff:'medium',m:30,days:34,med:16,cooks:7,slots:['lunch']},
+ {n:'Brinjal tamarind stew',alt:'Vankaya pulusu',role:'gravy',ing:'brinjal',eff:'medium',m:35,days:20,med:19,cooks:9,slots:['lunch']},
+ {n:'Egg curry',alt:null,role:'gravy',ing:'egg',eff:'medium',m:30,days:10,med:11,cooks:16,slots:['lunch','dinner'],veg:0},
+ {n:'Rajma',alt:null,role:'gravy',ing:'kidney beans',eff:'project',m:50,days:38,med:24,cooks:5,slots:['lunch','dinner'],prep:'soak'},
+ {n:'Buttermilk stew',alt:'Majjiga pulusu',role:'gravy',ing:'curd',eff:'quick',m:20,days:2,med:0,cooks:2,slots:['lunch']},
+ {n:'Paneer butter masala',alt:null,role:'gravy',ing:'paneer',eff:'medium',m:40,days:29,med:22,cooks:6,slots:['lunch','dinner']},
+];
+
+const ROLE={tiffin:'Tiffin',dal:'Dal',dry:'Dry curry',gravy:'Gravy',rice:'Rice dish'};
+const BUDGET={breakfast:['instant','quick','medium'],lunch:['instant','quick','medium','project'],dinner:['instant','quick','medium','project']};
+const RECENT=['potato','tomato'], PREP={ferment:true,soak:false}, RICE_YEST=true;
+
+let slot='breakfast', tab='today', filter='all', open=null, logging=null;
+
+const ratio=d=>d.med?d.days/d.med:1;
+function score(d){let s=ratio(d);
+  if(BUDGET[slot].indexOf(d.eff)<2)s+=1.5;
+  if(d.rice&&RICE_YEST)s+=1.2;
+  if(d.prep==='ferment'&&PREP.ferment)s+=1.0;
+  if(RECENT.includes(d.ing))s-=4.0;
+  return s}
+function eligible(d){
+  return d.slots.includes(slot)&&BUDGET[slot].includes(d.eff)&&!(d.prep&&!PREP[d.prep])}
+function reasons(d){const o=[],r=ratio(d);
+  if(!d.med)o.push(['c-n','new dish']);
+  else if(r>=1.6)o.push(['c-g',d.days+' days — long overdue']);
+  else if(r>=1)o.push(['c-g','due, '+d.days+' days']);
+  else o.push(['c-n',d.days+' days ago']);
+  if(d.prep==='ferment'&&PREP.ferment)o.push(['c-c','batter is ready']);
+  if(d.rice&&RICE_YEST)o.push(['c-c','leftover rice']);
+  if(d.eff==='instant'||d.eff==='quick')o.push(['c-t','under 20 min']);
+  return o.slice(0,3)}
+function gauge(d){
+  const r=d.med?Math.min(ratio(d),1.4):0;
+  const c=!d.med?'transparent':(ratio(d)>=1?'var(--gongura)':'var(--turmeric)');
+  return `<div class="gauge"${!d.med?' style="border:1px dashed var(--line)"':''}><i style="width:${(r/1.4*100).toFixed(1)}%;background:${c}"></i><span class="due"></span></div>`}
+
+function today(){
+  const top=D.filter(eligible).sort((a,b)=>score(b)-score(a)).slice(0,3);
+  const lbl={breakfast:'What\'s for breakfast?',lunch:'What\'s for lunch?',dinner:'What\'s for dinner?'}[slot];
+  return `<div class="hd"><div class="eyebrow">Saturday morning</div><h2>${lbl}</h2></div>
+  <div class="slots" role="group" aria-label="Meal slot">
+    ${['breakfast','lunch','dinner'].map(s=>`<button class="slot" data-slot="${s}" aria-pressed="${s===slot}">${s[0].toUpperCase()+s.slice(1)}</button>`).join('')}
+  </div>
+  <div class="banner"><span class="dot"></span><p><b>Batter is alive</b> — ground Thursday, good through tomorrow. Idli and dosa are back in rotation.</p></div>
+  <div class="cards">${top.map(d=>`
+    <button class="card" data-log="${d.n}">
+      <div class="top"><div><div class="nm">${d.n}</div>
+      <div class="sub">${ROLE[d.role]} · ${d.ing}${d.rx?' · has recipe':''}</div></div>
+      <div class="mins">${d.m} min</div></div>
+      ${gauge(d)}
+      <div class="chips">${reasons(d).map(c=>`<span class="chip ${c[0]}">${c[1]}</span>`).join('')}</div>
+    </button>`).join('')}</div>
+  <button class="ghost" id="more">Show three more</button>
+  <div class="sect"><h3>Held back</h3>
+    <div style="font-size:12.5px;color:var(--ink-2);line-height:1.6;padding-bottom:22px">
+      Aloo fry and tomato dal are skipped — potato and tomato both came up in the last two days.
+      Rajma needs an overnight soak, so it isn't eligible today; nudge at 9pm if you want it tomorrow.
+    </div></div>`}
+
+function dishes(){
+  const roles=[['all','All'],['tiffin','Tiffin'],['dal','Dal'],['dry','Dry curry'],['gravy','Gravy'],['rice','Rice']];
+  const list=D.filter(d=>filter==='all'||d.role===filter).sort((a,b)=>(b.med?ratio(b):0)-(a.med?ratio(a):0));
+  return `<div class="hd"><div class="eyebrow">${D.length} dishes · ${D.filter(d=>d.rx).length} with recipes</div><h2>Your repertoire</h2></div>
+  <div class="rowfilters" role="group" aria-label="Filter by role">
+    ${roles.map(r=>`<button class="rf" data-filter="${r[0]}" aria-pressed="${r[0]===filter}">${r[1]}</button>`).join('')}
+  </div>
+  <div class="list">${list.map(d=>`
+    <button class="li" data-open="${d.n}">
+      <div class="body"><div class="nm">${d.n}</div>
+      <div class="meta">${d.med?'every ~'+d.med+'d':'new'} · ${d.ing}${d.rx?' · <span class="doc">recipe</span>':''}</div></div>
+      <div class="vg">${gauge(d)}</div><div class="num">${d.days}d</div>
+    </button>`).join('')}</div><div style="height:24px"></div>`}
+
+function detail(name){
+  const d=D.find(x=>x.n===name), r=ratio(d);
+  const state=!d.med?'No pattern yet':(r>=1?'Overdue by '+(d.days-d.med)+' days':'Due in '+(d.med-d.days)+' days');
+  const ev=d.ev||[];
+  return `<button class="back" data-back><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>Dishes</button>
+  <div class="hd" style="padding-top:4px">
+    <div class="eyebrow">${ROLE[d.role]} · ${d.eff}${d.prep?' · needs '+(d.prep==='soak'?'overnight soak':'batter'):''}</div>
+    <h2>${d.n}</h2>
+    ${d.alt?`<div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:5px">also called ${d.alt}</div>`:''}
+  </div>
+  <div class="sect">
+    ${gauge(d)}
+    <div style="font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:7px">${state}</div>
+    <h3>Pattern</h3>
+    <div class="stats">
+      <div class="stat"><div class="k">Cooked</div><div class="v">${d.cooks}<small> times</small></div></div>
+      <div class="stat"><div class="k">Last made</div><div class="v">${d.days}<small>d ago</small></div></div>
+      <div class="stat"><div class="k">Usually every</div><div class="v">${d.med?d.med+'<small>d</small>':'—'}</div></div>
+      <div class="stat"><div class="k">Takes</div><div class="v">${d.m}<small> min</small></div></div>
+    </div>
+    <h3>Recipe</h3>
+    ${d.rx?`<div class="rx">
+      <ul>${d.rx.ing.map(i=>`<li>${i}</li>`).join('')}</ul>
+      <p style="margin-top:11px">${d.rx.me}</p>
+      </div>
+      <button class="smallbtn" style="margin-top:6px" data-editrx>Edit recipe</button>`
+    :`<div class="empty"><p>No recipe saved yet. Add it whenever you have a minute — the app works fine without one.</p>
+      <button class="smallbtn" data-editrx>Add recipe</button></div>`}
+    ${d.notes?`<h3>Notes</h3><div class="rx">${d.notes}</div>`:''}
+    <h3>From past cooks</h3>
+    ${ev.length?`<div class="tl">${ev.map(e=>`
+      <div class="ev ${e.r===3?'good':e.r===1?'bad':''}">
+        <div class="d">${e.d}${e.r===3?' · make again':e.r===1?' · not again':''}</div>
+        ${e.t?`<div class="tx">${e.t}</div>`:`<div class="none">no note</div>`}
+      </div>`).join('')}</div>`
+    :`<div class="empty"><p>Notes you leave after cooking will collect here.</p></div>`}
+    <div style="height:20px"></div>
+    <button class="prim" data-log="${d.n}">Log a cook</button>
+    <div style="height:26px"></div>
+  </div>`}
+
+function insights(){
+  const by={};D.forEach(d=>by[d.ing]=(by[d.ing]||0)+1);
+  const top=Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,6),mx=top[0][1];
+  return `<div class="hd"><div class="eyebrow">Last 30 days</div><h2>Insights</h2></div>
+  <div class="sect">
+    <div class="stats">
+      <div class="stat"><div class="k">Meals cooked</div><div class="v">41</div></div>
+      <div class="stat"><div class="k">Distinct dishes</div><div class="v">18</div></div>
+      <div class="stat"><div class="k">Overdue now</div><div class="v">7</div></div>
+      <div class="stat"><div class="k">Recipes saved</div><div class="v">${D.filter(d=>d.rx).length}<small>/${D.length}</small></div></div>
+    </div>
+    <h3>Repertoire coverage</h3>
+    ${top.map(t=>`<div class="bar"><div class="bl">${t[0]}</div><div class="bt"><i style="width:${t[1]/mx*100}%"></i></div><div class="bn">${t[1]}</div></div>`).join('')}
+    <div class="note" style="margin-top:15px">Brinjal and urad dal carry six of your dishes between them. Nothing leafy in 17 days.</div>
+    <h3>Thinnest slot</h3>
+    <div style="font-size:12.5px;color:var(--ink-2);line-height:1.6;padding-bottom:26px">
+      Breakfast. Nine dishes, but four need batter or an overnight soak — so on an unprepared morning it's upma or poha.
+    </div>
+  </div>`}
+
+function sheet(name){
+  return `<div class="grab"></div><h3>${name}</h3>
+  <div class="fld"><label>Meal</label><div class="seg" role="group">
+    ${['Breakfast','Lunch','Dinner'].map(s=>`<button data-seg aria-pressed="${s.toLowerCase()===slot}">${s}</button>`).join('')}
+  </div></div>
+  <div class="fld"><label>How did it turn out</label><div class="seg" role="group">
+    <button data-seg aria-pressed="false">Not again</button>
+    <button data-seg aria-pressed="true">Fine</button>
+    <button data-seg aria-pressed="false">Make again</button>
+  </div></div>
+  <div class="fld"><label>For next time</label>
+    <textarea class="ti" rows="2" placeholder="Less tamarind, 4 whistles not 3" aria-label="Note for next time"></textarea>
+    <div class="mic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 2a3 3 0 013 3v6a3 3 0 01-6 0V5a3 3 0 013-3zM5 11a7 7 0 0014 0M12 18v4"/></svg>Hold to dictate — hands stay dirty</div>
+  </div>
+  <button class="prim" data-save>Log it</button>
+  <button class="lnk" data-add>Add another dish to this meal</button>`}
+
+const scroll=document.getElementById('scroll'),sh=document.getElementById('sheet'),
+      shi=document.getElementById('sheetInner'),toast=document.getElementById('toast');
+
+function render(){
+  scroll.innerHTML = open?detail(open):tab==='today'?today():tab==='dishes'?dishes():insights();
+  document.querySelectorAll('#nav button').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===tab&&!open?'page':'false'));
+  document.getElementById('fab').style.display=(tab==='today'&&!open)?'flex':'none';
+}
+document.getElementById('nav').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  tab=b.dataset.tab;open=null;scroll.scrollTop=0;render()});
+scroll.addEventListener('click',e=>{
+  const s=e.target.closest('[data-slot]');if(s){slot=s.dataset.slot;render();return}
+  const f=e.target.closest('[data-filter]');if(f){filter=f.dataset.filter;render();return}
+  if(e.target.closest('[data-back]')){open=null;scroll.scrollTop=0;render();return}
+  const o=e.target.closest('[data-open]');if(o){open=o.dataset.open;scroll.scrollTop=0;render();return}
+  const c=e.target.closest('[data-log]');if(c){openSheet(c.dataset.log);return}
+  if(e.target.closest('[data-editrx]')){
+    const b=e.target.closest('[data-editrx]');b.textContent='Recipe editor — free text, ingredients and method';b.disabled=true;return}
+  const m=e.target.closest('#more');
+  if(m){m.textContent='That\'s everything eligible for this slot';m.disabled=true}});
+
+function openSheet(n){logging=n;shi.innerHTML=sheet(n);sh.classList.add('open')}
+sh.addEventListener('click',e=>{
+  if(e.target===sh){sh.classList.remove('open');return}
+  const sg=e.target.closest('[data-seg]');
+  if(sg){sg.parentElement.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed','false'));
+    sg.setAttribute('aria-pressed','true');return}
+  if(e.target.closest('[data-save]')){
+    const d=D.find(x=>x.n===logging);d.days=0;d.cooks++;if(!d.med)d.med=7;
+    sh.classList.remove('open');render();
+    toast.textContent=logging+' logged. Next one due in about '+d.med+' days.';
+    toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2600)}
+  if(e.target.closest('[data-add]'))e.target.closest('[data-add]').textContent='Pick the second dish…'});
+render();
+</script>
+</body>
+</html>
