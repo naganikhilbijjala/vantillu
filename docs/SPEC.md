@@ -101,6 +101,17 @@ the next slot boundary.
 `snack` is **never auto-detected** — it's reachable by manual override and by the log
 sheet, but Today never opens on it.
 
+The override is held **in memory only** (Phase 4). It lapses at the instant
+`nextSlotBoundary` returns and is not persisted, so there is no `setting` row for it and
+nothing for the Phase 10 export to carry. Reopening the app hours later re-reads the clock,
+which is what anyone reopening it would expect. Because the expiry is an instant rather than
+"the slot it was taken in", an override taken at 21:00 correctly survives midnight and ends
+at 04:00 along with dinner itself.
+
+While an override is in force the Today header states **both** times: the eyebrow says the
+real time of day, the title says the slot being answered for. Showing only the override
+reads as the app having lost track of the clock.
+
 ### 2.3 Seasons
 
 Derived from the local month. Indian seasons, not the Western four — the seed only uses
@@ -200,6 +211,15 @@ Definitions that were previously unstated:
   the fridge.
 - **Expiring prep** — a live `prep_state` row whose `expiresAt` is within 24 h. This is a
   *bonus*, not a filter: use the batter before it dies.
+- **Last rating** — the rating on the most recent cook event **that carries one**, not the
+  rating on the most recent cook event. A cook logged in a hurry with no rating is not an
+  opinion and must not erase an earlier *not again*. Resolved in Phase 4; the phrase in the
+  table above is "last rated 1", and this is what that means.
+
+The three windows above are elapsed hours; the recent-ingredient window is **calendar
+days**, per §2.1. A rice staple at 23:00 is still leftover rice at 09:00, and a batch cook
+is a 48-hour fridge fact, but "cooked brinjal yesterday" is a day boundary — a 23-hour gap
+and a 25-hour gap are both yesterday.
 
 The −4.0 ingredient penalty is deliberately large enough to sink an overdue dish. Repeating
 brinjal three days running is worse than eating something less due.
@@ -242,6 +262,13 @@ screen, or backgrounding and reopening the app, must never reorder the suggestio
   `due, N days` (1 ≤ ratio < 1.6) · `N days — long overdue` (ratio ≥ 1.6).
 - **Held back** section, prose not a list, covering filters 4–6 only. Cap at three
   clauses; if more were held back, the section says so in aggregate rather than growing.
+  One clause per surfaced reason, and **within a clause, two dish names then a count** —
+  "Rajma, Chana masala and 3 others". A slot that holds back fifteen dishes still costs
+  three sentences. The clause wording lives with the Today screen, not in `src/core/`:
+  SPEC fixes the chip labels because the engine emits them, and leaves this copy to the
+  screen that renders it.
+- Empty is a normal state, not a failure. A slot with nothing eligible says so and offers
+  the next move; it never scolds, and the held-back prose underneath does the explaining.
 
 ---
 
@@ -278,6 +305,12 @@ Matching on the pair is what makes one batter row cover idli, dosa, uttapam and 
 
 A dish with `prepKind` set and no matching live row is **hard-excluded**. Suggesting dosa
 with no batter is worse than suggesting nothing.
+
+Both timestamps are nullable, and Phase 4 fixed what a null means: **no `readyAt` is
+ready** (there was no lead time to wait out) and **no `expiresAt` never expires**. Either
+reading leaves the user in control rather than quietly binning their batter. An archived
+dish is never counted as unlocked, and a live row that unlocks nothing raises no banner —
+"Batter is ready" over an empty list is worse than silence.
 
 ### 5.3 Lifecycle
 
@@ -319,6 +352,15 @@ Two settings, both consulted by the query layer, never by `src/core/`:
 Default is empty on purpose: silently hiding chicken curry on a fresh install would read
 as a bug, not a feature. The Today screen exposes the override as a toggle; the weekday set
 is configured in settings.
+
+The toggle only ever moves `vegOnlyToday`. When it is the *weekday set* making today
+vegetarian, the toggle reads as **on but locked** rather than as switchable — tapping it
+could not turn the day off, and a control that visibly fails to do what it says is worse
+than one that explains itself. Turning the override off writes an empty string rather than
+deleting the row, so the row keeps its `updatedAt` for the export.
+
+A malformed `vegOnlyWeekdays` value parses to the empty default rather than throwing. A
+corrupt settings row must not be able to stop the Today screen from rendering.
 
 ---
 

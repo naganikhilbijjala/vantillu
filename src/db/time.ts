@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { addHours, format, parseISO } from 'date-fns';
 
 /**
  * Local ISO datetime — `2026-07-26T08:14:00`, no timezone suffix.
@@ -18,4 +18,18 @@ export function toLocalIso(date: Date): string {
 
 export function nowLocalIso(): string {
   return toLocalIso(new Date());
+}
+
+/**
+ * The inverse. `parseISO` reads an offset-less string as local time, which is exactly
+ * what `toLocalIso` wrote — `new Date(string)` agrees for date-times but silently
+ * switches to UTC for a bare `yyyy-MM-dd`, so it is not used here.
+ */
+export function parseLocalIso(value: string): Date {
+  return parseISO(value);
+}
+
+/** Local ISO, shifted. Used wherever a lead time or a shelf life produces a timestamp. */
+export function localIsoPlusHours(from: Date, hours: number): string {
+  return toLocalIso(addHours(from, hours));
 }

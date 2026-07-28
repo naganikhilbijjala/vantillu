@@ -1,6 +1,6 @@
 import { asc, isNull } from 'drizzle-orm';
 import { db } from '../client';
-import { dish, roleConfig } from '../schema';
+import { dish } from '../schema';
 
 /**
  * Phase 1 debug screen only. Returns the query builder rather than the rows so the
@@ -22,16 +22,4 @@ export function dishListQuery() {
     .from(dish)
     .where(isNull(dish.deletedAt))
     .orderBy(asc(dish.name));
-}
-
-export function roleConfigQuery() {
-  return db
-    .select({
-      role: roleConfig.role,
-      label: roleConfig.label,
-      isAlwaysAvailable: roleConfig.isAlwaysAvailable,
-    })
-    .from(roleConfig)
-    .where(isNull(roleConfig.deletedAt))
-    .orderBy(asc(roleConfig.sortOrder));
 }

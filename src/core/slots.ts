@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { addDays, format, setHours, startOfHour } from 'date-fns';
 import type { Effort, Season, Slot } from './types';
 
 /**
@@ -72,6 +72,31 @@ export function slotForHour(hour: number): Slot {
 
 export function slotForDate(date: Date): Slot {
   return slotForHour(date.getHours());
+}
+
+/** Ascending, and the only hours `nextSlotBoundary` can return. */
+export const SLOT_BOUNDARY_HOURS: readonly number[] = [
+  BREAKFAST_START_HOUR,
+  LUNCH_START_HOUR,
+  DINNER_START_HOUR,
+];
+
+/**
+ * The next local moment at which `slotForDate` returns something different.
+ *
+ * A manual slot override on the Today screen lasts until this instant and no longer
+ * (SPEC §2.2). Strictly forward: standing exactly on 11:00 gives 17:00, not 11:00, so an
+ * override taken on the boundary still gets its full window.
+ *
+ * Evening rolls to tomorrow's 04:00 because dinner owns 17:00 through 03:59 — an override
+ * taken at 21:00 is still in force at 01:00, which is the honest reading of "until the
+ * next boundary".
+ */
+export function nextSlotBoundary(date: Date): Date {
+  const hour = date.getHours();
+  const laterToday = SLOT_BOUNDARY_HOURS.find((boundary) => boundary > hour);
+  const base = laterToday === undefined ? addDays(date, 1) : date;
+  return startOfHour(setHours(base, laterToday ?? SLOT_BOUNDARY_HOURS[0]));
 }
 
 /** Month is 1-based here — `getMonth()` is not. */

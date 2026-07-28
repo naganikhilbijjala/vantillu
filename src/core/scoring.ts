@@ -31,6 +31,34 @@ export const WEIGHTS = {
   ratedNotAgain: -1.5,
 } as const;
 
+/**
+ * The lookback windows behind the boolean and list fields of `Context` (SPEC §4.3).
+ *
+ * Nothing here reads a clock — `Context` arrives pre-resolved. They live in core anyway
+ * because SPEC requires every numeric constant to be a named export from `src/core/`, and
+ * because the query layer that applies them must not be free to invent its own numbers.
+ */
+export const WINDOWS = {
+  /** A rice staple this recent still counts as leftover rice. */
+  riceStapleHours: 24,
+  /** Calendar days, today inclusive: today and yesterday. Not elapsed hours. */
+  recentIngredientCalendarDays: 2,
+  /** A batch cook fills its role for this long. */
+  batchRoleHours: 48,
+  /** Live prep closer than this to expiry earns the "use it now" bonus. */
+  expiringPrepHours: 24,
+} as const;
+
+/**
+ * "Rice staple" is the role *and* the ingredient, which is exactly why `staple` and
+ * `one_pot` are separate roles: the boost fires from plain rice and lands on pulihora
+ * (SPEC §4.3). Defaults — the user can rename `staple`, and renaming it turns the boost
+ * off until these are re-pointed, which is the honest behaviour for a heuristic keyed to
+ * a specific dish.
+ */
+export const RICE_STAPLE_ROLE = 'staple';
+export const RICE_STAPLE_INGREDIENT = 'rice';
+
 /** `instant` and `quick`. Compared against the fixed rank table, never an array index. */
 export const QUICK_EFFORT_MAX_RANK = 1;
 

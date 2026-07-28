@@ -25,6 +25,10 @@ anything on iOS.
 1. **`src/core/` is pure TypeScript.** No React, no React Native, no database imports.
    Pure functions over plain objects. If a function needs the DB, it belongs in
    `src/db/queries/` instead.
+   `src/db/` is split the same way one level down: **`src/db/queries/` imports `db`;
+   modules at the `src/db/` root do not** (`time.ts`, `roles.ts`, `settings.ts`,
+   `todayModel.ts`). Row-shaping and window logic go in the latter, so they can be unit
+   tested in Node. Never read the clock in either — take `now` as an argument.
 2. **Never store derived values.** `daysSince`, `medianInterval`, and `cookCount` are
    always computed. No cache columns — they drift.
 3. **Median, not mean**, for all interval math. Under 3 cook events, return `null` and

@@ -159,7 +159,9 @@ vantillu/
 │   ├── db/
 │   │   ├── schema.ts
 │   │   ├── client.ts
-│   │   ├── queries/              # one module per screen's data needs
+│   │   ├── queries/              # one module per screen's data needs — these import `db`
+│   │   ├── todayModel.ts         # rows + `now` → Candidate/Context. No `db`, no clock.
+│   │   ├── settings.ts           # how setting values are read. No `db`.
 │   │   └── seed.ts
 │   ├── components/
 │   ├── hooks/
@@ -167,7 +169,7 @@ vantillu/
 ├── drizzle/                      # generated migrations — commit these
 ├── assets/
 │   └── seed_dishes.json
-├── __tests__/                    # vitest, targets src/core only
+├── __tests__/                    # vitest — src/core, plus the two pure src/db modules
 ├── CLAUDE.md                     # conventions — loaded every session
 └── docs/
     ├── SPEC.md                   # product decisions — authoritative
@@ -409,6 +411,26 @@ is not in, so flipping the system setting is not needed to check either one.
 Slot auto-detection with manual override, live suggestions, prep banner, "held back"
 explainer, FAB.
 **Done when:** changing device time from morning to evening changes the suggestions.
+
+Two things landed here that the sketch above does not name.
+
+**The queries carry no timestamps.** Six small `useLiveQuery` reads over whole tables, then
+one pure function — `src/db/todayModel.ts` — turns rows plus a ticking `now` into
+`Candidate` and `Context`. A `WHERE cooked_at > ?` would have to be rebuilt and resubscribed
+every minute, remounting the list each time. It also keeps the median in `src/core/` where
+it is tested, rather than in SQL where it would not be. The clock itself is `useNow`, which
+ticks once a minute *and* on app foreground — an interval alone does not fire while
+backgrounded, so a phone left overnight would wake to yesterday's slot.
+
+**`todayModel.ts` imports neither `db` nor a clock**, which is the whole reason it is a
+separate module from `queries/today.ts`. Every window in SPEC §4.3 and every prep rule in
+§5.2 is applied there, so all of it is unit tested in Node — including an end-to-end pass
+over the real `assets/seed_dishes.json`, which is what catches the seed and the engine
+drifting apart. Do the same for any later screen whose data needs real logic.
+
+The FAB is present but inert until Phase 6, and `app/debug.tsx` grew three buttons that
+write `prep_state` rows, because Phase 9 owns the only real writer and the prep banner would
+otherwise be unverifiable code.
 
 ### Phase 5 — Dishes list and detail
 Staleness-sorted list, role filters, search, detail screen with pattern stats.

@@ -5,6 +5,8 @@ import {
   isWeekendDate,
   localDateKey,
   maxEffortRankForSlot,
+  nextSlotBoundary,
+  SLOT_BOUNDARY_HOURS,
   seasonForDate,
   seasonForMonth,
   slotForDate,
@@ -56,6 +58,42 @@ describe('slotForHour', () => {
   it('reads the local hour off a date', () => {
     expect(slotForDate(day(2026, 7, 27, 8))).toBe('breakfast');
     expect(slotForDate(day(2026, 7, 27, 19))).toBe('dinner');
+  });
+});
+
+describe('nextSlotBoundary', () => {
+  it('returns the next moment slotForDate would change', () => {
+    expect(nextSlotBoundary(day(2026, 7, 27, 8))).toEqual(day(2026, 7, 27, 11));
+    expect(nextSlotBoundary(day(2026, 7, 27, 13))).toEqual(day(2026, 7, 27, 17));
+  });
+
+  it('rolls dinner over midnight to the next breakfast', () => {
+    // Dinner owns 17:00–03:59, so the boundary after an evening override is tomorrow 04:00.
+    expect(nextSlotBoundary(day(2026, 7, 27, 19))).toEqual(day(2026, 7, 28, 4));
+    expect(nextSlotBoundary(day(2026, 7, 27, 23))).toEqual(day(2026, 7, 28, 4));
+  });
+
+  it('keeps the small hours on the same day, since dinner started yesterday', () => {
+    expect(nextSlotBoundary(day(2026, 7, 27, 2))).toEqual(day(2026, 7, 27, 4));
+  });
+
+  it('looks strictly forward when the clock is exactly on a boundary', () => {
+    expect(nextSlotBoundary(day(2026, 7, 27, 4))).toEqual(day(2026, 7, 27, 11));
+    expect(nextSlotBoundary(day(2026, 7, 27, 17))).toEqual(day(2026, 7, 28, 4));
+  });
+
+  it('discards minutes and seconds', () => {
+    const boundary = nextSlotBoundary(new Date(2026, 6, 27, 8, 37, 42, 500));
+    expect([boundary.getMinutes(), boundary.getSeconds(), boundary.getMilliseconds()]) //
+      .toEqual([0, 0, 0]);
+  });
+
+  it('lands on an hour that actually starts a slot', () => {
+    for (let hour = 0; hour < 24; hour++) {
+      const boundary = nextSlotBoundary(day(2026, 7, 27, hour));
+      expect(SLOT_BOUNDARY_HOURS).toContain(boundary.getHours());
+      expect(boundary.getTime()).toBeGreaterThan(day(2026, 7, 27, hour).getTime());
+    }
   });
 });
 

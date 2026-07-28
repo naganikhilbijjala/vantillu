@@ -15,6 +15,11 @@ export interface RoleDefault {
   isAlwaysAvailable: boolean;
 }
 
+/** A `role_config` row as everything downstream reads it. */
+export interface RoleConfigRow extends RoleDefault {
+  sortOrder: number;
+}
+
 export const DEFAULT_ROLES: readonly RoleDefault[] = [
   { role: 'staple', label: 'Staple', isAlwaysAvailable: false },
   { role: 'tiffin', label: 'Tiffin', isAlwaysAvailable: false },

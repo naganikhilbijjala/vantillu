@@ -7,10 +7,13 @@ import {
   JITTER_AMPLITUDE,
   jitter,
   MAX_REASON_CHIPS,
+  RICE_STAPLE_INGREDIENT,
+  RICE_STAPLE_ROLE,
   rankCandidates,
   reasons,
   score,
   WEIGHTS,
+  WINDOWS,
 } from '../src/core/scoring';
 import { effortRank } from '../src/core/slots';
 import { candidate, context } from './fixtures';
@@ -19,6 +22,19 @@ import { candidate, context } from './fixtures';
  * `docs/SPEC.md` §4. Seven of these are named in `docs/IMPLEMENTATION.md` §5 as tests
  * that must exist; they keep their exact wording so the two documents stay greppable.
  */
+
+describe('WINDOWS', () => {
+  it('pins the four lookbacks the query layer resolves Context with', () => {
+    expect(WINDOWS).toEqual({
+      riceStapleHours: 24,
+      recentIngredientCalendarDays: 2,
+      batchRoleHours: 48,
+      expiringPrepHours: 24,
+    });
+    expect(RICE_STAPLE_ROLE).toBe('staple');
+    expect(RICE_STAPLE_INGREDIENT).toBe('rice');
+  });
+});
 
 describe('isEligible', () => {
   it('isEligible: ferment dish with no live batter → false', () => {
