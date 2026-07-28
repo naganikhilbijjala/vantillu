@@ -1,11 +1,12 @@
-import { type DimensionValue, StyleSheet, View } from 'react-native';
+import { type DimensionValue, View } from 'react-native';
 import {
   GAUGE_DUE_FRACTION,
   gaugeFillFraction,
   staleness,
   stalenessState,
 } from '../core/interval';
-import { colors, gauge } from '../theme/tokens';
+import { gauge, type Theme } from '../theme/tokens';
+import { useTheme, useThemedStyles } from '../theme/useTheme';
 
 /**
  * How overdue a dish is, as a bar that fills toward the dish's own median interval
@@ -36,6 +37,9 @@ export function IntervalGauge({
   width,
   label,
 }: IntervalGaugeProps) {
+  const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
+
   const ratio = staleness(daysSince, medianInterval);
   // `stalenessState` owns the "median of 0 counts as unknown" rule, so the hollow bar
   // and the "new dish" chip can never disagree about what counts as no history.
@@ -73,14 +77,17 @@ export function IntervalGauge({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = ({ colors }: Theme) => ({
   track: {
     height: gauge.height,
-    justifyContent: 'center',
+    justifyContent: 'center' as const,
   },
   trackFlexible: {
-    alignSelf: 'stretch',
+    alignSelf: 'stretch' as const,
   },
+  // `lineSoft`, not `steel0`: the unfilled remainder should read as faintly in dark as it
+  // does in light, and a divider-weight colour is the one that stays proportionally faint
+  // against whichever surface it sits on.
   trackKnown: {
     backgroundColor: colors.lineSoft,
     borderRadius: gauge.trackRadius,
@@ -89,20 +96,20 @@ const styles = StyleSheet.create({
   // corner radius, and losing the dashes would lose the whole "no data" signal.
   trackUnknown: {
     borderWidth: 1,
-    borderStyle: 'dashed',
+    borderStyle: 'dashed' as const,
     borderColor: colors.line,
     borderRadius: 0,
   },
   fill: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     top: 0,
     bottom: 0,
     borderRadius: gauge.trackRadius,
   },
   dueMarker: {
-    position: 'absolute',
-    left: `${GAUGE_DUE_FRACTION * 100}%`,
+    position: 'absolute' as const,
+    left: `${GAUGE_DUE_FRACTION * 100}%` as DimensionValue,
     top: -gauge.markerOverhang,
     bottom: -gauge.markerOverhang,
     width: gauge.markerWidth,

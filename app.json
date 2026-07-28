@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "vantillu",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.vantillu.app",
       "supportsTablet": false
@@ -28,7 +28,12 @@
         {
           "backgroundColor": "#FBFCFC",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 76,
+          "dark": {
+            "backgroundColor": "#131817",
+            "image": "./assets/images/splash-icon.png",
+            "imageWidth": 76
+          }
         }
       ]
     ],

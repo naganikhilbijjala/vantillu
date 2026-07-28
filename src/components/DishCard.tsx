@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import type { Reason } from '../core/scoring';
-import { border, colors, radius, space, text } from '../theme/tokens';
+import { border, radius, space, type Theme } from '../theme/tokens';
+import { useThemedStyles } from '../theme/useTheme';
 import { IntervalGauge } from './IntervalGauge';
 import { ReasonChips } from './ReasonChip';
 
@@ -40,6 +41,8 @@ export function DishCard({
   reasons,
   onPress,
 }: DishCardProps) {
+  const styles = useThemedStyles(makeStyles);
+
   // A dish with no recipe is a normal dish, so this line only ever adds information —
   // it never says "no recipe".
   const meta = [roleLabel, primaryIngredient, hasRecipe ? 'has recipe' : null]
@@ -69,7 +72,7 @@ export function DishCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = ({ colors, text }: Theme) => ({
   card: {
     backgroundColor: colors.steel1,
     borderWidth: border.thin,
@@ -80,15 +83,15 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   cardPressed: {
-    backgroundColor: colors.steel2,
+    backgroundColor: colors.steelPressed,
     borderColor: colors.line,
   },
   top: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
     // Not 'baseline': the left column is a View, and RN does not resolve a container's
     // baseline reliably across platforms. The minutes are nudged down instead.
-    alignItems: 'flex-start',
+    alignItems: 'flex-start' as const,
     gap: 12,
   },
   identity: {

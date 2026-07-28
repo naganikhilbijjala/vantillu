@@ -395,7 +395,15 @@ Schema, `drizzle-kit generate`, `useMigrations` in the root layout, seed loader 
 ### Phase 3 — theme and shared components
 `tokens.ts` from the mockup palette, fonts loaded, then `IntervalGauge`, `ReasonChip`,
 `DishCard`. Build these in isolation on a scratch screen.
-**Done when:** a gauge renders correctly at ratios 0.3, 1.0, 1.6, and null.
+
+Dark mode landed here too, reversing `docs/SPEC.md` §12 — see §14 for the rules. It means
+both palettes live behind one `Palette` interface and **`StyleSheet.create` never runs at
+module scope**; styles come from `useThemedStyles(makeStyles)`. Doing it in this phase
+rather than later is the whole point: the theme is three components wide right now.
+
+**Done when:** a gauge renders correctly at ratios 0.3, 1.0, 1.6, and null — in both
+schemes. The scratch screen renders the gallery twice, once pinned to the scheme the device
+is not in, so flipping the system setting is not needed to check either one.
 
 ### Phase 4 — Today screen
 Slot auto-detection with manual override, live suggestions, prep banner, "held back"
@@ -456,6 +464,9 @@ that prevent the worst of it:
 - Local notification permissions differ: Android 13+ needs `POST_NOTIFICATIONS` at
   runtime, iOS needs an explicit request. Handle both in Phase 9 even though you can't
   test iOS yet.
+- `useColorScheme()` only reports `dark` on iOS when `app.json` sets `userInterfaceStyle`
+  to `automatic`. It is set, but a plugin or a config edit can quietly drop it, and the
+  symptom — an iPhone stuck in light mode — is invisible from Android.
 - Run `npx expo-doctor` before each release.
 
 **Do not build widgets yet.** Android app widgets need Kotlin, iOS needs WidgetKit and

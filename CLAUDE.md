@@ -98,6 +98,21 @@ Design tokens are in `src/theme/tokens.ts`; reference `docs/vantillu-mockup.html
 intended look. Brushed-steel neutrals, with turmeric / gongura-red / curry-green accents
 derived from food. Deliberately **not** warm cream and terracotta.
 
+**Light and dark, following the OS** (`docs/SPEC.md` §14). There is no in-app theme setting.
+
+- `tokens.ts` is the **only** file allowed to contain a hex literal. Both palettes live
+  there behind one `Palette` interface.
+- Colours are named by role, never by appearance. The `steel` surfaces are ordered by
+  prominence: light → lighter in light mode, dark → lighter after dark. Picking a token
+  because it "looks light enough" inverts wrongly in the other scheme.
+- **Never call `StyleSheet.create` at module scope** — it captures one palette forever.
+  Write `const makeStyles = ({ colors, text }: Theme) => ({ … })` at module scope and
+  `const styles = useThemedStyles(makeStyles)` in the component.
+- The mockup is light-only and stays authoritative for light. Dark is designed, so a new
+  colour needs a contrast check in both schemes: 4.5:1 for body text, 3:1 for graphics.
+  Three *existing* light values miss those floors and are knowingly left alone —
+  `docs/SPEC.md` §14.3.1. Don't "fix" them in passing, and don't add a fourth.
+
 - Ratings are 3-point: not again / fine / make again. Never 5 stars.
 - The interval gauge fills toward the median; the hairline marks "due"; overdue overflows
   in red; unknown median renders as a hollow dashed bar.

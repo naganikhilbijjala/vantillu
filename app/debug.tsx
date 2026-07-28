@@ -1,16 +1,17 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Link } from 'expo-router';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { dishListQuery, roleConfigQuery } from '../src/db/queries/debug';
-import { border, colors, layout, space, text } from '../src/theme/tokens';
+import { border, layout, space, type Theme } from '../src/theme/tokens';
+import { useThemedStyles } from '../src/theme/useTheme';
 
 /**
  * Phase 1 verification screen: proves migrations ran, the seed loaded, and the data
- * survives a restart. Throwaway — it has no design tokens and will be replaced by the
- * real Dishes list in Phase 5.
+ * survives a restart. Throwaway — it will be replaced by the real Dishes list in Phase 5.
  */
 export default function Debug() {
+  const styles = useThemedStyles(makeStyles);
   const { data: dishes, error: dishError } = useLiveQuery(dishListQuery());
   const { data: roles, error: roleError } = useLiveQuery(roleConfigQuery());
 
@@ -59,7 +60,7 @@ export default function Debug() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = ({ colors, text }: Theme) => ({
   safeArea: {
     flex: 1,
     backgroundColor: colors.steel2,

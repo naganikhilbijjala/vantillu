@@ -377,6 +377,7 @@ and nothing else needs touching.
 | 10 | `updatedAt` + `deletedAt` on every table | agreed | §11.3 |
 | 11 | Export is a versioned envelope, not a bare array | agreed | §10.3 |
 | 12 | Photos live outside the backup set and outside the export | agreed | §10.4 |
+| 13 | Dark mode ships, following the OS scheme with no in-app setting | **reversed in Phase 3** | §14 |
 
 ---
 
@@ -526,7 +527,8 @@ not a task.
   jaggery" and "4 whistles" is weeks of work and buys nothing until shopping lists exist.
 - **Backend, auth, sync, accounts, paid tiers.** Local SQLite plus versioned JSON export.
   See §11 for the three schema decisions that keep this door open at zero cost today.
-- **Dark mode.** The palette is a single brushed-steel light theme.
+- **An in-app light/dark setting.** Dark mode itself now ships — see §14 — but the scheme
+  follows the OS and there is nothing to configure.
 - **Meal planning ahead of today.** Vantillu answers "what should I cook *now*". A
   week-ahead planner is a different app.
 - **Nutrition, calories, macros.** Not this app, ever.
@@ -545,3 +547,84 @@ Noted here so Phase 6 and Phase 9 don't stall. `IMPLEMENTATION.md` §2 omits:
   gallery reference rather than copying the file into app storage (§10.4).
 
 Both are `npx expo install`.
+
+---
+
+## 14. Theming — light and dark
+
+Dark mode was on the Not-in-v1 list and was **reversed during Phase 3**, while the theme
+was three components and four screens wide. §12 keeps the half of that decision which
+still stands: there is no in-app light/dark *setting*.
+
+### 14.1 The scheme follows the OS
+
+`useColorScheme()` is the only input. Nothing is persisted, so no `setting` row exists, the
+Phase 10 export envelope is unaffected, and there is no settings control to build.
+
+`app.json` sets `userInterfaceStyle: "automatic"` — without it iOS never reports `dark` —
+and gives `expo-splash-screen` a `dark` variant so the launch screen does not flash white
+on a dark device.
+
+`useColorSchemeName()` in `src/theme/useTheme.tsx` is the single place that resolves the
+scheme. If an in-app override is ever wanted, that function is the only one that changes.
+
+### 14.2 Colour is named by role, never by appearance
+
+`src/theme/tokens.ts` holds both palettes behind one `Palette` interface and is the **only
+place a hex literal may appear**. A colour is chosen by what it is for — `steel1` is a
+raised surface, `lineSoft` is a divider, `gongura` is past-due — and each scheme supplies
+its own value for that role.
+
+The three `steel` surfaces are ordered by prominence, not brightness: in light they run
+light → lighter, and after dark they run dark → lighter. A component that picks a token
+because of how bright it looks will invert wrongly in the other scheme.
+
+`steelPressed` exists because "one step brighter than a card" is `steel2` in light and
+`steel0` in dark, so no member of the ordered triple expresses it.
+
+### 14.3 The dark palette is designed, not derived
+
+`docs/vantillu-mockup.html` is light-only and stays authoritative for light. Dark follows
+three rules:
+
+- **Surfaces rise by getting lighter**, so a chip still separates from the card under it.
+- **Each accent splits in two.** The graphic value (gauge fill, banner dot) is brightened,
+  because the light values are too dark to register against a dark surface. The chip pair —
+  a desaturated `Bg` and a high-lightness `Ink` — is separate, since reusing the graphic
+  value as text on a tinted fill fails contrast.
+- **Contrast floors**: 4.5:1 for body text, 3:1 for graphic elements and large type. The
+  dark palette was measured against these and clears all of them.
+
+Everything meaning-carrying is unchanged after dark. Turmeric is still "not due yet", red
+is still past due, green is still "something is ready", and the gauge geometry in §8 does
+not move.
+
+### 14.3.1 Three inherited light-mode contrast failures
+
+The floors above are the rule for **new** colours. The light palette predates them: it is
+transcribed from the mockup, and measuring it turned up three values that miss, all on the
+lightest surfaces (`steel1` / `steel2`).
+
+| Pair | Measured | Floor | Where it shows |
+|---|---|---|---|
+| `ink3` #8C9794 on `steel1` | 2.83 | 4.5 | Every eyebrow and mono metadata line |
+| `ink3` as the due hairline | 2.83 | 3.0 | The gauge's "due" mark |
+| `turmeric` #BE8E17 fill | 2.78 | 3.0 | The gauge fill for a not-yet-due dish |
+
+These are **not** dark-mode regressions — the same roles in dark measure 4.53, 4.53 and
+7.35. They are left as-is because the mockup is authoritative for the light look and fixing
+them changes it visibly: `ink3` would need roughly #697572, which darkens all tertiary text.
+
+Fixing them is a one-line change per value in `tokens.ts` and a product decision, not a
+task. Until then, the honest statement is that dark mode meets AA and light mode does not,
+in three places, and nothing new may be added below the floors.
+
+### 14.4 Two rules that are easy to break
+
+`StyleSheet.create` must not run at module scope any more — it would capture one palette
+for the life of the process. Styles come from `useThemedStyles(makeStyles)`, which builds
+each scheme's sheet at most once and caches it, so style identity stays stable across
+renders.
+
+A hard-coded hex outside `tokens.ts` will look correct in whichever scheme it was written
+for and wrong in the other. There is no third place for colour.

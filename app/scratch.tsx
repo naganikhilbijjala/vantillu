@@ -1,5 +1,5 @@
 import { Link } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DishCard } from '../src/components/DishCard';
 import { IntervalGauge } from '../src/components/IntervalGauge';
@@ -7,7 +7,21 @@ import { Chip, ReasonChips } from '../src/components/ReasonChip';
 import { staleness } from '../src/core/interval';
 import { reasons } from '../src/core/scoring';
 import type { Candidate, Context } from '../src/core/types';
-import { colors, gauge, layout, space, text } from '../src/theme/tokens';
+import {
+  border,
+  type ColorScheme,
+  gauge,
+  layout,
+  radius,
+  space,
+  type Theme,
+} from '../src/theme/tokens';
+import {
+  ThemeSchemeProvider,
+  useColorSchemeName,
+  useTheme,
+  useThemedStyles,
+} from '../src/theme/useTheme';
 
 /**
  * Phase 3 component gallery. Throwaway — the same components get their real data from
@@ -16,6 +30,10 @@ import { colors, gauge, layout, space, text } from '../src/theme/tokens';
  * It exists to check the three shared components against fixed inputs, on device, without
  * needing the right cook history in the database to reach each state. The gauge row is the
  * phase's acceptance criterion: ratios 0.3, 1.0, 1.6, and null.
+ *
+ * The gallery renders twice: once in the scheme the OS is currently in, then again pinned
+ * to the other one. Both palettes are therefore checkable in a single pass, without
+ * digging through system settings between looks.
  */
 
 // ---------------------------------------------------------------------------
@@ -57,7 +75,7 @@ const ctx: Context = {
   rolesFilledByBatch: [],
 };
 
-/** The four states the gauge has to get right, plus the two edges that hide bugs. */
+/** The four states the gauge has to get right, plus the three edges that hide bugs. */
 const GAUGE_CASES = [
   { label: 'ratio 0.3 — not due', daysSince: 3, medianInterval: 10 },
   { label: 'ratio 1.0 — exactly due', daysSince: 10, medianInterval: 10 },
@@ -150,104 +168,142 @@ const CARD_CASES: {
 // ---------------------------------------------------------------------------
 
 export default function Scratch() {
+  const styles = useThemedStyles(makeStyles);
+  const scheme = useColorSchemeName();
+  const otherScheme: ColorScheme = scheme === 'dark' ? 'light' : 'dark';
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Link href="/" style={styles.back}>
-          ← vantillu
-        </Link>
-        <Text style={styles.eyebrow}>Phase 3</Text>
-        <Text style={styles.title}>Components</Text>
-
-        <Text style={styles.heading}>Interval gauge — full width</Text>
-        {GAUGE_CASES.map((c) => (
-          <View key={c.label} style={styles.gaugeRow}>
-            <Text style={styles.caseLabel}>{c.label}</Text>
-            {/* The gauge stretches to its container, so a row parent needs a flex box
-                around it — the component itself stays direction-agnostic. */}
-            <View style={styles.gaugeSlot}>
-              <IntervalGauge
-                daysSince={c.daysSince}
-                medianInterval={c.medianInterval}
-                label={c.label}
-              />
-            </View>
-            <Text style={styles.figure}>
-              {c.medianInterval
-                ? staleness(c.daysSince, c.medianInterval).toFixed(2)
-                : '—'}
-            </Text>
-          </View>
-        ))}
-
-        <Text style={styles.heading}>Interval gauge — list width</Text>
-        <View style={styles.compactRow}>
-          {GAUGE_CASES.map((c) => (
-            <IntervalGauge
-              key={c.label}
-              daysSince={c.daysSince}
-              medianInterval={c.medianInterval}
-              width={gauge.compactWidth}
-            />
-          ))}
+      <ScrollView>
+        <View style={styles.page}>
+          <Link href="/" style={styles.back}>
+            ← vantillu
+          </Link>
+          <Text style={styles.eyebrow}>Phase 3 · {scheme} (following the OS)</Text>
+          <Text style={styles.title}>Components</Text>
+          <Gallery />
         </View>
 
-        <Text style={styles.heading}>Reason chips</Text>
-        {CHIP_CASES.map((c) => (
-          <View key={c.label} style={styles.chipRow}>
-            <Text style={styles.caseLabel}>{c.label}</Text>
-            <ReasonChips reasons={reasons(c.candidate, ctx)} />
-          </View>
-        ))}
-
-        <Text style={styles.heading}>Chip tones</Text>
-        <View style={styles.toneRow}>
-          <Chip label="neutral" />
-          <Chip label="turmeric" tone="turmeric" />
-          <Chip label="gongura" tone="gongura" />
-          <Chip label="curry" tone="curry" />
-        </View>
-
-        <Text style={styles.heading}>Dish card</Text>
-        <View style={styles.cards}>
-          {CARD_CASES.map((c) => (
-            <DishCard
-              key={c.candidate.name}
-              name={c.candidate.name}
-              roleLabel={c.roleLabel}
-              primaryIngredient={c.candidate.primaryIngredient}
-              minutes={c.minutes}
-              hasRecipe={c.hasRecipe}
-              daysSince={c.candidate.daysSince}
-              medianInterval={c.candidate.medianInterval}
-              reasons={reasons(c.candidate, ctx)}
-            />
-          ))}
-        </View>
-
-        <Text style={styles.heading}>Type scale</Text>
-        <Text style={styles.title}>Title 25</Text>
-        <Text style={text.cardTitle}>Card title 16.5</Text>
-        <Text style={text.rowTitle}>Row title 14.5</Text>
-        <Text style={text.body}>
-          Body 13.5 — free text recipe, notes, held-back prose.
-        </Text>
-        <Text style={text.bodySmall}>Body small 12.5 — supporting copy.</Text>
-        <Text style={text.meta}>meta 10.5 mono</Text>
-        <Text style={text.statValue}>21</Text>
+        {/* Pinned to the scheme the device is *not* in, so one pass covers both. */}
+        <ThemeSchemeProvider scheme={otherScheme}>
+          <SchemePreview scheme={otherScheme} />
+        </ThemeSchemeProvider>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+/** Renders inside the provider, so every token here resolves to the pinned scheme. */
+function SchemePreview({ scheme }: { scheme: ColorScheme }) {
+  const styles = useThemedStyles(makeStyles);
+
+  return (
+    <View style={[styles.page, styles.preview]}>
+      <Text style={styles.eyebrow}>{scheme} · pinned preview</Text>
+      <Gallery />
+    </View>
+  );
+}
+
+function Gallery() {
+  const styles = useThemedStyles(makeStyles);
+  const { text } = useTheme();
+
+  return (
+    <View>
+      <Text style={styles.heading}>Interval gauge — full width</Text>
+      {GAUGE_CASES.map((c) => (
+        <View key={c.label} style={styles.gaugeRow}>
+          <Text style={styles.caseLabel}>{c.label}</Text>
+          {/* The gauge stretches to its container, so a row parent needs a flex box
+              around it — the component itself stays direction-agnostic. */}
+          <View style={styles.gaugeSlot}>
+            <IntervalGauge
+              daysSince={c.daysSince}
+              medianInterval={c.medianInterval}
+              label={c.label}
+            />
+          </View>
+          <Text style={styles.figure}>
+            {c.medianInterval ? staleness(c.daysSince, c.medianInterval).toFixed(2) : '—'}
+          </Text>
+        </View>
+      ))}
+
+      <Text style={styles.heading}>Interval gauge — list width</Text>
+      <View style={styles.compactRow}>
+        {GAUGE_CASES.map((c) => (
+          <IntervalGauge
+            key={c.label}
+            daysSince={c.daysSince}
+            medianInterval={c.medianInterval}
+            width={gauge.compactWidth}
+          />
+        ))}
+      </View>
+
+      <Text style={styles.heading}>Reason chips</Text>
+      {CHIP_CASES.map((c) => (
+        <View key={c.label} style={styles.chipRow}>
+          <Text style={styles.caseLabel}>{c.label}</Text>
+          <ReasonChips reasons={reasons(c.candidate, ctx)} />
+        </View>
+      ))}
+
+      <Text style={styles.heading}>Chip tones</Text>
+      <View style={styles.toneRow}>
+        <Chip label="neutral" />
+        <Chip label="turmeric" tone="turmeric" />
+        <Chip label="gongura" tone="gongura" />
+        <Chip label="curry" tone="curry" />
+      </View>
+
+      <Text style={styles.heading}>Dish card</Text>
+      <View style={styles.cards}>
+        {CARD_CASES.map((c) => (
+          <DishCard
+            key={c.candidate.name}
+            name={c.candidate.name}
+            roleLabel={c.roleLabel}
+            primaryIngredient={c.candidate.primaryIngredient}
+            minutes={c.minutes}
+            hasRecipe={c.hasRecipe}
+            daysSince={c.candidate.daysSince}
+            medianInterval={c.candidate.medianInterval}
+            reasons={reasons(c.candidate, ctx)}
+          />
+        ))}
+      </View>
+
+      <Text style={styles.heading}>Type scale</Text>
+      <Text style={text.title}>Title 25</Text>
+      <Text style={text.cardTitle}>Card title 16.5</Text>
+      <Text style={text.rowTitle}>Row title 14.5</Text>
+      <Text style={text.body}>Body 13.5 — free text recipe, notes, held-back prose.</Text>
+      <Text style={text.bodySmall}>Body small 12.5 — supporting copy.</Text>
+      <Text style={text.meta}>meta 10.5 mono</Text>
+      <Text style={text.statValue}>21</Text>
+    </View>
+  );
+}
+
+const makeStyles = ({ colors, text }: Theme) => ({
   safeArea: {
     flex: 1,
     backgroundColor: colors.steel2,
   },
-  scroll: {
+  page: {
+    backgroundColor: colors.steel2,
     paddingHorizontal: layout.screenPaddingH,
     paddingBottom: 40,
+  },
+  preview: {
+    marginTop: space.xxl,
+    borderTopWidth: border.thin,
+    borderTopColor: colors.line,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
+    paddingTop: space.xl,
   },
   back: {
     ...text.control,
@@ -270,8 +326,8 @@ const styles = StyleSheet.create({
     width: 150,
   },
   gaugeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: space.lg,
     marginBottom: 14,
   },
@@ -279,22 +335,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   compactRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    alignItems: 'center' as const,
     gap: space.lg,
   },
   figure: {
     ...text.figure,
     width: 34,
-    textAlign: 'right',
+    textAlign: 'right' as const,
   },
   chipRow: {
     marginBottom: space.sm,
   },
   toneRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: 5,
   },
   cards: {

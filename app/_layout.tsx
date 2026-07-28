@@ -8,12 +8,13 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import migrations from '../drizzle/migrations';
 import { db } from '../src/db/client';
 import { seedDatabaseIfEmpty } from '../src/db/seed';
-import { colors, layout, space, text } from '../src/theme/tokens';
+import { layout, space, type Theme } from '../src/theme/tokens';
+import { useTheme, useThemedStyles } from '../src/theme/useTheme';
 
 /**
  * Root layout: migrations, then the first-run seed, then fonts.
@@ -25,10 +26,11 @@ import { colors, layout, space, text } from '../src/theme/tokens';
  * stay in step with `fonts` in `src/theme/tokens.ts`. A mismatch fails quietly — the text
  * falls back to the system face instead of throwing.
  *
- * There is no theme provider. The palette is a single static light theme (SPEC §12), so
- * screens import `src/theme/tokens.ts` directly and a context would only add indirection.
+ * The scheme follows the OS (SPEC §14). Nothing here selects it — `useTheme()` reads
+ * `useColorScheme()`, so a change in the system setting re-renders the tree on its own.
  */
 export default function RootLayout() {
+  const theme = useTheme();
   const { success, error } = useMigrations(db, migrations);
   const [seeded, setSeeded] = useState(false);
   const [seedError, setSeedError] = useState<Error | null>(null);
@@ -58,7 +60,8 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
+      {/* "auto" resolves from the scheme, so the bar inverts with the OS setting. */}
+      <StatusBar style="auto" />
       {fatal ? (
         <BootFailure
           title={
@@ -70,7 +73,7 @@ export default function RootLayout() {
         <Stack
           screenOptions={{
             headerShown: false,
-            contentStyle: { backgroundColor: colors.steel2 },
+            contentStyle: { backgroundColor: theme.colors.steel2 },
           }}
         />
       ) : (
@@ -81,6 +84,8 @@ export default function RootLayout() {
 }
 
 function BootProgress() {
+  const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
   return (
     <View style={styles.gate}>
       <ActivityIndicator color={colors.ink3} />
@@ -89,6 +94,7 @@ function BootProgress() {
 }
 
 function BootFailure({ title, message }: { title: string; message: string }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.gate}>
       <Text style={styles.failureTitle}>{title}</Text>
@@ -97,11 +103,11 @@ function BootFailure({ title, message }: { title: string; message: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = ({ colors, text }: Theme) => ({
   gate: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     backgroundColor: colors.steel2,
     paddingHorizontal: layout.screenPaddingH,
     gap: space.lg,
@@ -111,11 +117,11 @@ const styles = StyleSheet.create({
   failureTitle: {
     fontSize: 16,
     color: colors.ink,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   failureMessage: {
     ...text.bodySmall,
     fontFamily: undefined,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
 });

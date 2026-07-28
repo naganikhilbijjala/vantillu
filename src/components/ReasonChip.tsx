@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import type { Reason } from '../core/scoring';
-import { colors, radius, space, text } from '../theme/tokens';
+import { type Palette, radius, space, type Theme } from '../theme/tokens';
+import { useTheme, useThemedStyles } from '../theme/useTheme';
 
 /**
  * The chip that states *why* a dish is being suggested. Every suggestion shows at least
@@ -17,23 +18,38 @@ export interface ChipProps {
   tone?: ChipTone;
 }
 
+/**
+ * Each tone is a surface plus the text colour that is legible on it. The pairs are held
+ * together here rather than picked at each call site, because after dark a chip that reused
+ * the graphic accent as its text colour would fail contrast against the tinted fill.
+ */
+function toneColors(colors: Palette, tone: ChipTone) {
+  switch (tone) {
+    case 'turmeric':
+      return { background: colors.turmericBg, text: colors.turmericInk };
+    case 'gongura':
+      return { background: colors.gonguraBg, text: colors.gonguraInk };
+    case 'curry':
+      return { background: colors.curryBg, text: colors.curryInk };
+    case 'neutral':
+      return { background: colors.steel0, text: colors.ink2 };
+  }
+}
+
 /** The bare pill. Exported because role filters and metadata need it without a `Reason`. */
 export function Chip({ label, tone = 'neutral' }: ChipProps) {
+  const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
+  const { background, text } = toneColors(colors, tone);
+
   return (
-    <View style={[styles.chip, { backgroundColor: TONE[tone].background }]}>
-      <Text style={[styles.label, { color: TONE[tone].text }]} numberOfLines={1}>
+    <View style={[styles.chip, { backgroundColor: background }]}>
+      <Text style={[styles.label, { color: text }]} numberOfLines={1}>
         {label}
       </Text>
     </View>
   );
 }
-
-const TONE: Record<ChipTone, { background: string; text: string }> = {
-  neutral: { background: colors.steel0, text: colors.ink2 },
-  turmeric: { background: colors.turmericBg, text: colors.turmericInk },
-  gongura: { background: colors.gonguraBg, text: colors.gonguraInk },
-  curry: { background: colors.curryBg, text: colors.curryInk },
-};
 
 /**
  * Colour carries the same meaning as the gauge: red is past due, turmeric is a nudge
@@ -59,7 +75,21 @@ export function ReasonChip({ reason }: { reason: Reason }) {
   return <Chip label={reason.label} tone={toneForReason(reason)} />;
 }
 
-const styles = StyleSheet.create({
+/** Row wrapper for a set of chips — the gap and wrapping are part of the component. */
+export function ReasonChips({ reasons }: { reasons: readonly Reason[] }) {
+  const styles = useThemedStyles(makeStyles);
+  if (reasons.length === 0) return null;
+
+  return (
+    <View style={styles.row}>
+      {reasons.map((reason) => (
+        <ReasonChip key={`${reason.kind}:${reason.label}`} reason={reason} />
+      ))}
+    </View>
+  );
+}
+
+const makeStyles = ({ text }: Theme) => ({
   chip: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -68,24 +98,9 @@ const styles = StyleSheet.create({
   label: {
     ...text.chip,
   },
-});
-
-/** Row wrapper for a set of chips — the gap and wrapping are part of the component. */
-export function ReasonChips({ reasons }: { reasons: readonly Reason[] }) {
-  if (reasons.length === 0) return null;
-  return (
-    <View style={chipRowStyles.row}>
-      {reasons.map((reason) => (
-        <ReasonChip key={`${reason.kind}:${reason.label}`} reason={reason} />
-      ))}
-    </View>
-  );
-}
-
-const chipRowStyles = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: 5,
     marginTop: space.md,
   },
