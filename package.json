@@ -8,6 +8,7 @@
     "android": "expo start --dev-client --android",
     "ios": "expo start --dev-client --ios",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "lint": "biome check .",
     "format": "biome check --write .",
     "db:generate": "drizzle-kit generate",
@@ -47,6 +48,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",
     "@types/react": "~19.2.2",
+    "@vitest/coverage-v8": "^4.1.10",
     "babel-plugin-inline-import": "^3.0.0",
     "babel-preset-expo": "~57.0.4",
     "drizzle-kit": "^0.31.10",
