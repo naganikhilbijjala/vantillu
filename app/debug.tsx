@@ -3,6 +3,7 @@ import { Link } from 'expo-router';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { dishListQuery, roleConfigQuery } from '../src/db/queries/debug';
+import { border, colors, layout, space, text } from '../src/theme/tokens';
 
 /**
  * Phase 1 verification screen: proves migrations ran, the seed loaded, and the data
@@ -58,57 +59,49 @@ export default function Debug() {
   );
 }
 
-// Placeholder colours until Phase 3 introduces src/theme/tokens.ts.
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#16181A',
+    backgroundColor: colors.steel2,
   },
   header: {
-    paddingHorizontal: 20,
+    paddingHorizontal: layout.screenPaddingH,
     paddingTop: 8,
     paddingBottom: 16,
-    gap: 4,
+    gap: space.xs,
   },
   back: {
-    color: '#8A9199',
-    fontSize: 13,
-    letterSpacing: 1,
+    ...text.control,
     marginBottom: 8,
   },
   count: {
-    color: '#D9DEE3',
-    fontSize: 22,
+    ...text.title,
   },
   subCount: {
-    color: '#8A9199',
-    fontSize: 13,
+    ...text.bodySmall,
   },
   list: {
-    paddingHorizontal: 20,
+    paddingHorizontal: layout.screenPaddingH,
     paddingBottom: 32,
   },
   row: {
     paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#2A2E33',
+    borderTopWidth: border.hairline,
+    borderTopColor: colors.lineSoft,
   },
   name: {
-    color: '#D9DEE3',
-    fontSize: 15,
+    ...text.rowTitle,
   },
   altName: {
-    color: '#8A9199',
-    fontSize: 13,
+    ...text.meta,
   },
   meta: {
-    color: '#6E757C',
-    fontSize: 12,
-    marginTop: 2,
+    ...text.meta,
+    marginTop: space.xs,
   },
   error: {
-    color: '#C8553D',
-    fontSize: 13,
-    paddingHorizontal: 20,
+    ...text.bodySmall,
+    color: colors.gongura,
+    paddingHorizontal: layout.screenPaddingH,
   },
 });
