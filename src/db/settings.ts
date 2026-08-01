@@ -1,4 +1,5 @@
 import { localDateKey } from '../core/slots';
+import { parseLocalIso, toLocalIso } from './time';
 
 /**
  * How the `setting` table is read (`docs/SPEC.md` §6, §18.4).
@@ -28,6 +29,12 @@ export const SETTING_KEYS = {
    * look identical in the `dish` table and must not behave the same way.
    */
   onboardedAt: 'onboardedAt',
+  /**
+   * JSON object of `dishId → local ISO datetime`: when each dish was last scheduled a prep
+   * reminder. The only thing the notification planner has to remember, and the reason it
+   * can stay a pure function of rows (SPEC §20.3).
+   */
+  prepNudgedAt: 'prepNudgedAt',
 } as const;
 
 export interface SettingRow {
@@ -84,4 +91,37 @@ export function isVegOnlyDay(settings: SettingMap, now: Date): boolean {
   if (isVegOnlyToday(settings, now)) return true;
   const weekdays = parseVegOnlyWeekdays(settings.get(SETTING_KEYS.vegOnlyWeekdays));
   return weekdays.includes(isoWeekday(now));
+}
+
+/**
+ * When each dish was last scheduled a prep reminder (SPEC §20.3).
+ *
+ * One row holding a small JSON object rather than a row per dish: it is written by a
+ * background sync rather than by anything the user does, and a settings table that grows a
+ * key per dish would turn every read of it into a scan. Same tolerance for a corrupt value
+ * as the veg-only weekdays — an unreadable marker means "never nudged", which errs toward
+ * one extra reminder rather than toward silence.
+ */
+export function parsePrepNudgedAt(raw: string | undefined): Map<string, Date> {
+  const out = new Map<string, Date>();
+  if (!raw) return out;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
+      return out;
+    for (const [dishId, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value !== 'string') continue;
+      const at = parseLocalIso(value);
+      if (!Number.isNaN(at.getTime())) out.set(dishId, at);
+    }
+  } catch {
+    return new Map();
+  }
+  return out;
+}
+
+export function serialisePrepNudgedAt(entries: ReadonlyMap<string, Date>): string {
+  const out: Record<string, string> = {};
+  for (const [dishId, at] of entries) out[dishId] = toLocalIso(at);
+  return JSON.stringify(out);
 }

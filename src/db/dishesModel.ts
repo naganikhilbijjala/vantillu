@@ -58,6 +58,8 @@ export interface DishListItem {
   /** True when there is an ingredients list or a method. Notes alone are not a recipe. */
   hasRecipe: boolean;
   prepKind: PrepKind | null;
+  /** What a reminder is measured back from, and what the editor offers (§20.2, §19.2). */
+  prepLeadHours: number | null;
   prepLabel: string | null;
   slots: Slot[];
   isVeg: boolean;
@@ -125,6 +127,7 @@ export function buildDishList(inputs: DishesInputs, now: Date): DishListItem[] {
       // counts as content.
       hasRecipe: hasRecipe(d),
       prepKind: asPrepKind(d.prepKind),
+      prepLeadHours: d.prepLeadHours,
       prepLabel: d.prepLabel,
       slots: slotsByDish.get(d.id) ?? [],
       isVeg: d.isVeg,

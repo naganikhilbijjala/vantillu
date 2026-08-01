@@ -29,6 +29,8 @@ export function dishesQuery() {
       minutes: dish.minutes,
       isVeg: dish.isVeg,
       prepKind: dish.prepKind,
+      // Read since Phase 9: it is what a prep reminder is measured back from (SPEC §20.2).
+      prepLeadHours: dish.prepLeadHours,
       prepLabel: dish.prepLabel,
       usesLeftoverRice: dish.usesLeftoverRice,
       season: dish.season,

@@ -34,6 +34,7 @@ function dishRow(overrides: Partial<DishRow> = {}): DishRow {
     minutes: 20,
     isVeg: true,
     prepKind: null,
+    prepLeadHours: null,
     prepLabel: null,
     usesLeftoverRice: false,
     season: null,

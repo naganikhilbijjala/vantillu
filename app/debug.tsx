@@ -1,3 +1,4 @@
+import { format } from 'date-fns';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -6,9 +7,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackLink } from '../src/components/BackLink';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { resetOnboarding } from '../src/db/queries/onboarding';
-import { clearAllPrep, startPrep } from '../src/db/queries/prep';
+import { clearAllPrep } from '../src/db/queries/prep';
 import { roleConfigQuery } from '../src/db/queries/roles';
 import { prepStatesQuery } from '../src/db/queries/tables';
+import { useRequestNotificationPermission } from '../src/hooks/useNotificationPermission';
+import { usePrepPlan } from '../src/hooks/usePrepNotifications';
+import { listScheduled, scheduleTestNotification } from '../src/notifications/client';
 import { border, layout, radius, space, type Theme } from '../src/theme/tokens';
 import { useThemedStyles } from '../src/theme/useTheme';
 
@@ -17,35 +21,30 @@ import { useThemedStyles } from '../src/theme/useTheme';
  *
  * Started life as the Phase 1 screen proving migrations ran and the seed loaded. Phase 5
  * took the dish listing out of it — the real Dishes tab does that now, with gauges — and
- * what is left is the one thing there is still no other way to do.
+ * what is left is whatever the product has no other way to show.
  *
- * **`prep_state` has no product writer until Phase 9.** Without these buttons the Today
- * prep banner, the "batter is ready" chip, and the hard exclusion of a dish whose prep is
- * not ready are all unverifiable on device. The role list stays because the
- * always-available flag is invisible everywhere else, and it is the flag — never the role
- * name — that drives the behaviour (`docs/SPEC.md` §1.1).
+ * Phase 9 took the prep fixture buttons out for the reason their own comment promised:
+ * every dish that needs prep now has a Prep section on its detail screen, so there is a
+ * real writer and a fixture would be a second one that could disagree with it.
  *
- * All of this goes when Phase 9 builds real prep controls.
+ * **What replaced them is the notification plan.** Its whole output arrives hours later
+ * and only if the OS agrees, so without somewhere to read "here is what is scheduled and
+ * when", the only way to check a change is to wait until nine at night and find out
+ * whether nothing happening was correct. The role list stays for the same shape of reason:
+ * the always-available flag is invisible everywhere else, and it is the flag — never the
+ * role name — that drives the behaviour (`docs/SPEC.md` §1.1).
  */
-
-/** Matches the seeded `(prep_kind, primary_ingredient)` pairs — see SPEC §5.2. */
-const PREP_FIXTURES = [
-  { label: 'Urad dal batter', kind: 'batter', ingredient: 'urad dal', note: '72 h' },
-  {
-    label: 'Soaked kidney beans',
-    kind: 'soaked',
-    ingredient: 'kidney beans',
-    note: '24 h',
-  },
-  { label: 'Soaked chickpeas', kind: 'soaked', ingredient: 'chickpeas', note: '24 h' },
-] as const;
 
 export default function Debug() {
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const { data: roles, error: roleError } = useLiveQuery(roleConfigQuery());
   const { data: prep, error: prepError } = useLiveQuery(prepStatesQuery());
+  // The plan, not the scheduler — the root layout owns the one copy that has side effects.
+  const { plan, granted } = usePrepPlan();
+  const { request } = useRequestNotificationPermission();
   const [asking, setAsking] = useState(false);
+  const [scheduled, setScheduled] = useState<string[] | null>(null);
 
   const error = roleError ?? prepError;
   const alwaysAvailable = (roles ?? []).filter((r) => r.isAlwaysAvailable);
@@ -63,27 +62,9 @@ export default function Debug() {
         <Text style={styles.heading}>Prep state</Text>
         <Text style={styles.body}>
           {prep?.length ?? 0} row{(prep?.length ?? 0) === 1 ? '' : 's'} in the table.
-          Adding one makes its dishes cookable on Today, with a banner and a reason chip.
+          Started and thrown out from a dish's own Prep section; this only clears them.
         </Text>
         <View style={styles.buttons}>
-          {PREP_FIXTURES.map((fixture) => (
-            <Pressable
-              key={`${fixture.kind}:${fixture.ingredient}`}
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-              onPress={() =>
-                startPrep({
-                  kind: fixture.kind,
-                  ingredient: fixture.ingredient,
-                  label: fixture.label,
-                })
-              }
-            >
-              <Text style={styles.buttonLabel}>
-                + {fixture.label} · {fixture.note}
-              </Text>
-            </Pressable>
-          ))}
           <Pressable
             accessibilityRole="button"
             style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
@@ -92,6 +73,71 @@ export default function Debug() {
             <Text style={styles.buttonLabel}>Clear all prep</Text>
           </Pressable>
         </View>
+
+        {/* The one part of the app whose output is invisible until hours later, and only
+            then if the OS cooperates. Reading the plan is how a change to it gets checked
+            at all (SPEC §20). */}
+        <Text style={styles.heading}>Notifications</Text>
+        <Text style={styles.body}>
+          Permission:{' '}
+          {granted === null ? 'not checked' : granted ? 'granted' : 'not granted'}.{' '}
+          {plan.nudges.length} prep reminder
+          {plan.nudges.length === 1 ? '' : 's'} planned
+          {plan.droppedNudges > 0
+            ? `, ${plan.droppedNudges} more dropped by the cap`
+            : ''}
+          , {plan.readyAlerts.length} ready alert
+          {plan.readyAlerts.length === 1 ? '' : 's'}.
+        </Text>
+
+        {plan.nudges.map((nudge) => (
+          <Text key={nudge.id} style={styles.entry}>
+            {format(nudge.fireAt, 'EEE d MMM, HH:mm')} · {nudge.title}
+          </Text>
+        ))}
+        {plan.readyAlerts.map((alert) => (
+          <Text key={alert.id} style={styles.entry}>
+            {format(alert.fireAt, 'EEE d MMM, HH:mm')} · {alert.title}
+          </Text>
+        ))}
+
+        <View style={styles.buttons}>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+            onPress={() => void request()}
+          >
+            <Text style={styles.buttonLabel}>Ask for permission</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+            onPress={() => void scheduleTestNotification()}
+          >
+            <Text style={styles.buttonLabel}>Fire one in 10s</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+            onPress={() =>
+              void listScheduled().then((items) =>
+                setScheduled(items.map((item) => item.title ?? item.id)),
+              )
+            }
+          >
+            <Text style={styles.buttonLabel}>What is actually scheduled?</Text>
+          </Pressable>
+        </View>
+
+        {scheduled === null ? null : scheduled.length === 0 ? (
+          <Text style={styles.entry}>The OS is holding nothing.</Text>
+        ) : (
+          scheduled.map((title) => (
+            <Text key={title} style={styles.entry}>
+              held · {title}
+            </Text>
+          ))
+        )}
 
         <Text style={styles.heading}>Roles</Text>
         <Text style={styles.body}>
@@ -162,6 +208,10 @@ const makeStyles = ({ colors, text }: Theme) => ({
   },
   body: {
     ...text.bodySmall,
+  },
+  entry: {
+    ...text.meta,
+    marginTop: space.sm,
   },
   buttons: {
     flexDirection: 'row' as const,

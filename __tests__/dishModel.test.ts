@@ -238,9 +238,10 @@ describe('parseMinutes', () => {
 
 describe('toDishUpdate', () => {
   it('writes the identity and the recipe, and nothing the form cannot set', () => {
-    // The absences are the point. `prepKind`, `prepLeadHours`, `prepLabel`, `season`,
-    // `usesLeftoverRice`, `isFestive` and `source` are seeded and unaskable, so leaving
-    // them out is what stops renaming a seeded dish from wiping the fact it needs batter.
+    // The absences are the point. `season`, `usesLeftoverRice`, `isFestive` and `source`
+    // are seeded and unaskable, so leaving them out is what stops renaming a seeded dish
+    // from wiping them. The three prep columns joined the list in Phase 9, once there was
+    // a way to start prep and therefore a way out of the exclusion (SPEC §19.2).
     expect(Object.keys(toDishUpdate(form(), NOW)).sort()).toEqual([
       'altName',
       'effort',
@@ -250,10 +251,40 @@ describe('toDishUpdate', () => {
       'minutes',
       'name',
       'notes',
+      'prepKind',
+      'prepLabel',
+      'prepLeadHours',
       'primaryIngredient',
       'role',
       'updatedAt',
     ]);
+  });
+
+  it('moves the three prep columns together', () => {
+    const soaking = toDishUpdate(
+      form({ prepKind: 'soaked', prepLeadHours: '8', prepLabel: 'soak overnight' }),
+      NOW,
+    );
+    expect([soaking.prepKind, soaking.prepLeadHours, soaking.prepLabel]) //
+      .toEqual(['soaked', 8, 'soak overnight']);
+
+    // Turning prep off has to take the lead time and the label with it. A dish still
+    // carrying "soak overnight" would say so in its own eyebrow and in the held-back note,
+    // describing a soak that can never happen.
+    const none = toDishUpdate(
+      form({ prepKind: 'none', prepLeadHours: '8', prepLabel: 'soak overnight' }),
+      NOW,
+    );
+    expect([none.prepKind, none.prepLeadHours, none.prepLabel]) //
+      .toEqual([null, null, null]);
+  });
+
+  it('drops an unparseable lead time rather than refusing the save', () => {
+    // A dish with a kind and no lead time is still correct — hard-excluded until its prep
+    // is started, and startable from its own detail screen. It just gets no reminder.
+    const update = toDishUpdate(form({ prepKind: 'batter', prepLeadHours: 'ages' }), NOW);
+    expect(update.prepKind).toBe('batter');
+    expect(update.prepLeadHours).toBeNull();
   });
 
   it('trims, and stores an emptied field as null rather than an empty string', () => {
@@ -271,6 +302,7 @@ describe('toNewDishRow', () => {
   it('leaves every field the form does not ask about empty', () => {
     const row = toNewDishRow(form(), 'dish-1', NOW);
 
+    // Prep is asked about and defaults to none, so a plain new dish still has none of it.
     expect(row.prepKind).toBeNull();
     expect(row.prepLeadHours).toBeNull();
     expect(row.prepLabel).toBeNull();
@@ -314,10 +346,33 @@ describe('hasDishEdits', () => {
       { isVeg: false },
       { slots: ['lunch', 'dinner'] },
       { notes: 'Better the next day.' },
+      { prepKind: 'soaked', prepLeadHours: '8' },
     ];
     for (const edit of edits) {
       expect(hasDishEdits(form(edit), saved)).toBe(true);
     }
+  });
+
+  it('does not count a lead time left behind by turning prep off', () => {
+    // Saving would clear it along with the kind, so it is nothing the user would lose.
+    const saved = {
+      ...BLANK,
+      name: 'Rasam',
+      slots: ['lunch'] as const,
+      prepKind: 'soaked' as const,
+      prepLeadHours: 8,
+    };
+    expect(hasDishEdits(form({ prepKind: 'none', prepLeadHours: '8' }), saved)).toBe(
+      true,
+    );
+    expect(hasDishEdits(form({ prepKind: 'none', prepLeadHours: '' }), saved)).toBe(true);
+    // …and changing only the lead time, while prep stays on, is an edit.
+    expect(hasDishEdits(form({ prepKind: 'soaked', prepLeadHours: '12' }), saved)).toBe(
+      true,
+    );
+    expect(hasDishEdits(form({ prepKind: 'soaked', prepLeadHours: '8' }), saved)).toBe(
+      false,
+    );
   });
 
   it('fires as soon as a new dish is given a name', () => {

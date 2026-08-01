@@ -3,6 +3,7 @@ import { summariseHistory } from '../core/interval';
 import { RICE_STAPLE_INGREDIENT, RICE_STAPLE_ROLE, WINDOWS } from '../core/scoring';
 import { isWeekendDate, seasonForDate } from '../core/slots';
 import type { Candidate, Context, PrepKind, Slot } from '../core/types';
+import { isUsablePhase, matchesPrep, prepPhaseAt, prepTimes } from './prepModel';
 import type { RoleConfigRow } from './roles';
 import {
   asEffort,
@@ -100,10 +101,6 @@ function elapsedHours(now: Date, at: Date): number {
   return (now.getTime() - at.getTime()) / MS_PER_HOUR;
 }
 
-function hoursUntil(now: Date, at: Date): number {
-  return elapsedHours(at, now);
-}
-
 interface ResolvedPrep {
   livePrepDishIds: Set<string>;
   expiringPrepDishIds: Set<string>;
@@ -115,9 +112,10 @@ interface ResolvedPrep {
  * what lets one batter row cover idli, dosa and uttapam while correctly leaving out
  * pesarattu, which is soaked moong rather than fermented urad.
  *
- * Both timestamps are nullable in the schema. A row with no `readyAt` is treated as ready
- * — it had no lead time to wait out — and a row with no `expiresAt` never expires, which
- * is the reading that leaves the user in control rather than quietly binning their batter.
+ * The phase rules and the pair match come from `prepModel.ts`, which Phase 9 made the one
+ * home for both. This module carried its own copy of "pending", "expired" and "expiring
+ * soon" first; a second reading of any of them would eventually disagree with the
+ * reminders about whether there is batter in the fridge.
  */
 function resolvePrep(
   rows: readonly PrepStateRow[],
@@ -129,23 +127,12 @@ function resolvePrep(
   const livePrep: LivePrep[] = [];
 
   for (const row of rows) {
-    const readyAt = row.readyAt === null ? null : parseLocalIso(row.readyAt);
-    const expiresAt = row.expiresAt === null ? null : parseLocalIso(row.expiresAt);
+    const { readyAt, expiresAt } = prepTimes(row);
+    const phase = prepPhaseAt({ readyAt, expiresAt }, now);
+    if (!isUsablePhase(phase)) continue; // pending or expired
+    const expiringSoon = phase === 'expiring';
 
-    if (readyAt !== null && readyAt > now) continue; // still pending
-    if (expiresAt !== null && expiresAt <= now) continue; // expired
-
-    const expiringSoon =
-      expiresAt !== null && hoursUntil(now, expiresAt) <= WINDOWS.expiringPrepHours;
-
-    // `===` rather than SQL's NULL semantics: a prep row and a dish that both leave the
-    // ingredient unset describe the same thing, and in practice both sides are populated.
-    const matched = dishes.filter(
-      (d) =>
-        !d.isArchived &&
-        d.prepKind === row.kind &&
-        d.primaryIngredient === row.ingredient,
-    );
+    const matched = dishes.filter((d) => !d.isArchived && matchesPrep(d, row));
     if (matched.length === 0) continue; // live, but unlocks nothing worth a banner
 
     for (const d of matched) {

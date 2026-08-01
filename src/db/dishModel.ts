@@ -1,4 +1,4 @@
-import type { Effort, Slot } from '../core/types';
+import type { Effort, PrepKind, Slot } from '../core/types';
 import { type NewDishRow, trimToNull } from './rows';
 import { toLocalIso } from './time';
 
@@ -107,6 +107,16 @@ export const EFFORT_OPTIONS: readonly { value: Effort; label: string }[] = [
   { value: 'project', label: 'Project' },
 ];
 
+/** "No prep" is a choice on the control, not an absent value. */
+export type PrepChoice = PrepKind | 'none';
+
+export const PREP_OPTIONS: readonly { value: PrepChoice; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'soaked', label: 'Soak' },
+  { value: 'batter', label: 'Ferment' },
+  { value: 'marinated', label: 'Marinate' },
+];
+
 /** What the identity half of the form holds. Raw, untrimmed, exactly as typed. */
 export interface DishIdentityInput {
   name: string;
@@ -118,6 +128,19 @@ export interface DishIdentityInput {
   minutes: string;
   slots: Slot[];
   isVeg: boolean;
+  prepKind: PrepChoice;
+  /** Raw text. Parsed by `parseLeadHours`. */
+  prepLeadHours: string;
+  /**
+   * Carried through, never rendered.
+   *
+   * The seed writes wording like "soak overnight" and the held-back note and the prep
+   * banner both use it, so the form has to hold it or saving a dish would silently discard
+   * it. It gets no field of its own because `PREP_KIND_NOUN` and `PREP_KIND_ACTION` cover
+   * every place a label is needed, and a fourth prep input on a form whose whole promise is
+   * "a name and a meal is all it takes" is more than the wording is worth.
+   */
+  prepLabel: string;
 }
 
 /** The whole form: who the dish is, and how you make it. */
@@ -131,6 +154,23 @@ export interface DishFormInput extends DishIdentityInput, DishRecipeInput {}
  * a dish over a typo in the one field that changes nothing would be absurd.
  */
 export function parseMinutes(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const value = Number.parseInt(trimmed, 10);
+  return value > 0 ? value : null;
+}
+
+/**
+ * Prep lead time in hours, or nothing.
+ *
+ * Same shape as `parseMinutes` and a different meaning: this one is load-bearing, since it
+ * is what a reminder is measured back from (SPEC §20.2). A dish with a prep kind and no
+ * lead time still behaves correctly — it is hard-excluded until its prep is started, and
+ * the Prep section on its detail screen starts it — it simply gets no reminder. So a
+ * missing value costs a convenience rather than breaking the dish, which is why it is
+ * dropped rather than made a reason a dish cannot be saved.
+ */
+export function parseLeadHours(raw: string): number | null {
   const trimmed = raw.trim();
   if (!/^\d+$/.test(trimmed)) return null;
   const value = Number.parseInt(trimmed, 10);
@@ -163,11 +203,17 @@ export function canSaveDish(input: DishIdentityInput): boolean {
 /**
  * The identity columns the editor writes, and nothing else.
  *
- * Deliberately narrow in the other direction now. `prepKind`, `prepLeadHours`, `prepLabel`,
- * `season`, `usesLeftoverRice`, `isFestive` and `source` are **absent on purpose**: the seed
- * sets them, the form does not ask, and leaving them out of the update is what stops editing
- * a seeded dish's name from silently wiping the fact that dosa needs batter. Anything the
- * form cannot set, it must not be able to clear.
+ * Still deliberately narrow. `season`, `usesLeftoverRice`, `isFestive` and `source` are
+ * **absent on purpose**: the seed sets them, the form does not ask, and leaving them out of
+ * the update is what stops editing a seeded dish's name from silently wiping them. Anything
+ * the form cannot set, it must not be able to clear.
+ *
+ * The three prep columns used to be in that list and are not any more. Phase 7 kept them
+ * out because `prepKind` **hard-excludes** a dish until a matching live row exists (SPEC
+ * §5.2), and offering it before there was any way to start prep would have let someone hide
+ * a dish from themselves with no way to find out why. Phase 9 built the way — the Prep
+ * section on the detail screen — so the field can be asked for, and a hand-added dosa can
+ * finally say that it needs batter (§19.2).
  */
 export interface DishIdentityUpdate {
   name: string;
@@ -177,13 +223,25 @@ export interface DishIdentityUpdate {
   effort: string;
   minutes: number | null;
   isVeg: boolean;
+  prepKind: string | null;
+  prepLeadHours: number | null;
+  prepLabel: string | null;
   updatedAt: string;
 }
 
 export type DishUpdate = DishIdentityUpdate & DishRecipeUpdate;
 
-/** Identity plus recipe, for an existing dish. Slots are a separate table, handled apart. */
+/**
+ * Identity plus recipe, for an existing dish. Slots are a separate table, handled apart.
+ *
+ * The three prep columns move together: clearing the kind clears the lead time and the
+ * label with it. A dish left carrying "soak overnight" after being told it needs no prep
+ * would say so in its own eyebrow and in the held-back note, describing a soak that can
+ * never happen.
+ */
 export function toDishUpdate(input: DishFormInput, now: Date): DishUpdate {
+  const prepKind = input.prepKind === 'none' ? null : input.prepKind;
+
   return {
     // `name` is the one field that cannot be null, and `canSaveDish` is what guarantees it.
     name: trimToNull(input.name) ?? '',
@@ -193,6 +251,9 @@ export function toDishUpdate(input: DishFormInput, now: Date): DishUpdate {
     effort: input.effort,
     minutes: parseMinutes(input.minutes),
     isVeg: input.isVeg,
+    prepKind,
+    prepLeadHours: prepKind === null ? null : parseLeadHours(input.prepLeadHours),
+    prepLabel: prepKind === null ? null : trimToNull(input.prepLabel),
     ...toDishRecipeUpdate(input, now),
   };
 }
@@ -200,9 +261,9 @@ export function toDishUpdate(input: DishFormInput, now: Date): DishUpdate {
 /**
  * A brand-new dish row.
  *
- * The seven fields the form does not ask about start null or false — the same values a
- * hand-added dish would have had if the seed had never existed. A dish added here is a
- * plain one: no prep to wait for, no season, no leftover-rice boost.
+ * The four fields the form does not ask about start null or false — the same values a
+ * hand-added dish would have had if the seed had never existed. A dish added here has no
+ * season and no leftover-rice boost; since Phase 9 it can say what prep it needs.
  */
 export function toNewDishRow(input: DishFormInput, id: string, now: Date): NewDishRow {
   const timestamp = toLocalIso(now);
@@ -217,9 +278,9 @@ export function toNewDishRow(input: DishFormInput, id: string, now: Date): NewDi
     effort: update.effort,
     minutes: update.minutes,
     isVeg: update.isVeg,
-    prepKind: null,
-    prepLeadHours: null,
-    prepLabel: null,
+    prepKind: update.prepKind,
+    prepLeadHours: update.prepLeadHours,
+    prepLabel: update.prepLabel,
     usesLeftoverRice: false,
     isFestive: false,
     season: null,
@@ -244,6 +305,9 @@ export interface DishFormValues extends DishRecipeText {
   minutes: number | null;
   slots: readonly Slot[];
   isVeg: boolean;
+  prepKind: PrepKind | null;
+  prepLeadHours: number | null;
+  prepLabel: string | null;
 }
 
 /**
@@ -269,6 +333,9 @@ export function blankDishValues(role: string): DishFormValues {
     minutes: null,
     slots: [],
     isVeg: true,
+    prepKind: null,
+    prepLeadHours: null,
+    prepLabel: null,
     ingredientsText: null,
     methodText: null,
     notes: null,
@@ -286,6 +353,9 @@ export function toDishFormInput(saved: DishFormValues): DishFormInput {
     minutes: saved.minutes === null ? '' : String(saved.minutes),
     slots: [...saved.slots],
     isVeg: saved.isVeg,
+    prepKind: saved.prepKind ?? 'none',
+    prepLeadHours: saved.prepLeadHours === null ? '' : String(saved.prepLeadHours),
+    prepLabel: saved.prepLabel ?? '',
     ingredientsText: saved.ingredientsText ?? '',
     methodText: saved.methodText ?? '',
     notes: saved.notes ?? '',
@@ -316,6 +386,11 @@ export function hasDishEdits(input: DishFormInput, saved: DishFormValues): boole
     input.effort !== saved.effort ||
     parseMinutes(input.minutes) !== saved.minutes ||
     input.isVeg !== saved.isVeg ||
+    input.prepKind !== (saved.prepKind ?? 'none') ||
+    // Only while a kind is set: turning prep off drops the lead time and the label with it,
+    // so a stored 8 against a form that now says "none" is not an unsaved edit.
+    (input.prepKind !== 'none' &&
+      parseLeadHours(input.prepLeadHours) !== saved.prepLeadHours) ||
     !sameSlots(input.slots, saved.slots)
   );
 }

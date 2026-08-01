@@ -14,6 +14,7 @@ import migrations from '../drizzle/migrations';
 import { db } from '../src/db/client';
 import { seedRoleConfigIfEmpty } from '../src/db/seed';
 import { useOnboardingGate } from '../src/hooks/useOnboarding';
+import { usePrepNotifications } from '../src/hooks/usePrepNotifications';
 import { Onboarding } from '../src/screens/Onboarding';
 import { layout, radius, space, type Theme } from '../src/theme/tokens';
 import { useTheme, useThemedStyles } from '../src/theme/useTheme';
@@ -91,7 +92,6 @@ export default function RootLayout() {
  * migration above has not created yet.
  */
 function AppOrOnboarding() {
-  const theme = useTheme();
   const { needed, isReady, error } = useOnboardingGate();
 
   if (error) {
@@ -99,6 +99,26 @@ function AppOrOnboarding() {
   }
   if (!isReady) return <BootProgress />;
   if (needed) return <Onboarding />;
+
+  return (
+    <>
+      {/* Renders nothing. It lives here rather than on a screen because a reminder about
+          tomorrow's breakfast must not depend on which tab happened to be mounted when the
+          app was last closed — and below the onboarding gate, because there is nothing to
+          plan against until there is a repertoire (SPEC §20). */}
+      <PrepNotifications />
+      <AppStack />
+    </>
+  );
+}
+
+function PrepNotifications() {
+  usePrepNotifications();
+  return null;
+}
+
+function AppStack() {
+  const theme = useTheme();
 
   return (
     <Stack

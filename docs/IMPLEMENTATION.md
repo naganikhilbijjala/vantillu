@@ -165,12 +165,14 @@ vantillu/
 │   │   ├── rows.ts               # row shapes + TEXT → core union narrowing. No `db`.
 │   │   ├── todayModel.ts         # rows + `now` → Candidate/Context. No `db`, no clock.
 │   │   ├── dishesModel.ts        # rows + `now` → the repertoire list. No `db`, no clock.
+│   │   ├── prepModel.ts          # rows + `now` → prep phases + the reminder plan. Ph 9.
 │   │   ├── cookModel.ts          # log sheet + `now` → a cook_event row. No `db`, no clock.
 │   │   ├── onboardingModel.ts    # picker + buckets → estimated events. No `db`, no clock.
 │   │   ├── seedCatalog.ts        # seed_dishes.json → dish rows. No `db`, no crypto.
 │   │   ├── settings.ts           # how setting values are read. No `db`.
 │   │   └── seed.ts               # first-run role_config only, since Phase 8
 │   ├── components/
+│   ├── notifications/client.ts   # the only module that talks to the OS. Ph 9.
 │   ├── screens/                  # Onboarding — the one screen that is not a route
 │   ├── hooks/
 │   └── theme/tokens.ts
@@ -603,6 +605,56 @@ text button up there reads as incidental beside a full-screen list.
 `expo-notifications`, local only. Schedule a nudge `prepLeadHours` before the dish's
 usual slot. Manage `prepState` lifecycle: created, ready, expired.
 **Done when:** a 9pm soak reminder fires for an overdue dish that needs one.
+
+`docs/SPEC.md` §20 is authoritative; what follows is what the phase turned out to be about.
+
+**The 9pm in that criterion is not a constant anywhere — it falls out.** Reminders are
+measured back from when a meal is *cooked*, which needed a second hour table (§20.2): the
+§2.2 boundaries decide which meal it is *now* and so have to cover the whole day, and
+breakfast starting at 04:00 is no claim that anyone grinds batter then. Breakfast cooks at
+07:00, a soak wants 8 hours, and 23:00 is inside quiet hours — which move a nudge **earlier**,
+never later, because a reminder arriving after the moment it was about is worse than none.
+21:00. Every one of those is a named export in `src/core/slots.ts` with a test.
+
+**Two things were needed before a notification could be anything but noise.**
+
+*A place to start prep.* `prep_state` had no product writer at all — Phase 4 shipped dev-tools
+fixtures precisely because the banner was otherwise unverifiable — so a nudge saying "start
+the soak" would have led to a screen with no way to. That is the Prep section on the dish
+detail screen (§20.4), and it is also what finally makes the hard exclusion answerable:
+Today has said "dosa needs batter" since Phase 4, and this is where the batter gets started.
+
+*A cooldown.* An overdue dish stays overdue, so the naive planner reminds you about it **every
+night until you cook it**, which is the nagging this app avoids everywhere else. One settings
+row, `prepNudgedAt`, and a three-day quiet period (§20.3). The subtle part is that the marker
+is written by the sync and comes straight back in through `useLiveQuery` as planner input —
+so a candidate time *equal* to the stored one must never be skipped, or the plan drops the
+reminder it just made and the next sync cancels a notification nobody saw. That equality
+check has a test whose comment is longer than it is.
+
+**`src/db/prepModel.ts` is the sibling of `todayModel.ts`** — rows plus `now` in, plain
+objects out, no `db` and no clock. For a feature whose entire output arrives hours later and
+only if the OS agrees, that is the difference between testable and not: "an overnight soak for
+breakfast is a 9pm reminder" is an assertion in Node. It also absorbed `todayModel`'s private
+copy of pending/live/expiring/expired — two readings of "expired" is exactly the divergence
+`rows.ts` exists to prevent.
+
+**Permission is requested by a tap, never by a launch** (§20.5). The scheduler only schedules
+against a grant it already has. That means someone who never touches a prep-ahead dish is
+never asked, which is correct, and it keeps the cold dialog away from a first launch that
+otherwise asks nothing.
+
+Two smaller things. The **dish editor learned prep** — `prepKind` and `prepLeadHours` — which
+SPEC §19.2 had explicitly deferred to this phase: the field hides a dish until its prep is
+going, and that was a trap only while nothing could start prep. Seven untouchable fields are
+now four. And **`app/debug.tsx` swapped its prep fixtures for the notification plan**, for the
+reason the fixtures' own comment promised — there is a real writer now, and what dev tools are
+for is whatever has no other way to be seen. Reading "here is what is scheduled and when" is
+how a change to any of this gets checked without waiting until nine at night to find out
+whether nothing happening was correct.
+
+No `expo-notifications` config plugin, so no new dev build: it customises the Android icon and
+accent colour, and the module works without it. Worth adding with Phase 12.
 
 ### Phase 10 — export/import
 JSON export via `expo-sharing`, import via `expo-document-picker`. See `docs/SPEC.md` §10:

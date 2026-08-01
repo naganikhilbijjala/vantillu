@@ -28,8 +28,11 @@ anything on iOS.
    `src/db/` is split the same way one level down: **`src/db/queries/` imports `db`;
    modules at the `src/db/` root do not** (`time.ts`, `roles.ts`, `rows.ts`, `settings.ts`,
    `seedCatalog.ts`, `todayModel.ts`, `dishesModel.ts`, `cookModel.ts`, `dishModel.ts`,
-   `onboardingModel.ts`). `client.ts` and `seed.ts` are the two exceptions, and both exist
-   to *set the database up* rather than to shape a row.
+   `prepModel.ts`, `onboardingModel.ts`). `client.ts` and `seed.ts` are the two exceptions,
+   and both exist to *set the database up* rather than to shape a row.
+   `src/notifications/` is the same idea for the OS: `client.ts` is the only module that
+   imports `expo-notifications`, and everything it says or schedules is decided in
+   `prepModel.ts` first.
    Row-shaping and window logic go in the pure modules, so
    they can be unit tested in Node. Never read the clock in either — take `now` as an
    argument. One screen model per screen; shared row shapes and TEXT→union narrowing live
@@ -77,7 +80,14 @@ for imports.
   marinating. Live prep is matched on `(prepKind, primaryIngredient)`, so one batter row
   covers idli/dosa/uttapam but not pesarattu. A dish with `prepKind` and no matching live
   `prepState` row is **hard-excluded** — suggesting dosa with no batter is worse than
-  suggesting nothing.
+  suggesting nothing. Because it is a hard exclusion, every field that can set it has to
+  come with a way out: the Prep section on the dish detail screen is what makes it safe for
+  the editor to ask (`docs/SPEC.md` §20.4, §19.2).
+- **A prep row's state is never stored.** pending / live / expiring / expired are readings
+  of two timestamps against the clock, made in `src/db/prepModel.ts` on every render.
+  `prepPhaseAt` is the one definition — the Today banner, the dish's Prep section and the
+  reminder planner all read it. Pruning an expired row is the app's one hard delete: prep is
+  ephemeral state about a fridge, not history.
 - `usesLeftoverRice` dishes get a boost when a rice staple — `role='staple'` **and**
   `primaryIngredient='rice'` — was logged in the last 24h.
 
@@ -127,6 +137,23 @@ which silently reads as "very quick".
 suggestion without a stated reason gets ignored. When the engine excludes something the
 user would expect to see, the Today screen says so in the "held back" section — silent
 omissions read as bugs.
+
+## Notifications
+
+Local only, and only ever about **prep** (`docs/SPEC.md` §20). Two kinds: start the prep for
+an overdue dish, and this prep is now ready. Never a daily "what's for dinner", never a
+streak, never "you haven't logged in a while" — the app answers a question you came to it
+with, and a notification makes it one that interrupts you.
+
+- **Nothing nags.** A reminder is spaced by `PREP_NUDGE_COOLDOWN_DAYS`, because an overdue
+  dish stays overdue and the naive version fires every night forever.
+- **Permission is requested from a tap, never from a launch.** The scheduler only schedules
+  against a grant it already has. A denied permission costs the reminder, never the feature.
+- **Timing is planned, not read.** `SLOT_COOK_HOUR` is when a meal gets *cooked* and is a
+  different table from the §2.2 detection boundaries. A fire time inside quiet hours moves
+  **earlier**, never later.
+- Scheduling is a **set difference on identifiers**, which encode what fires and when. Never
+  cancel-all-and-reschedule: it drops a reminder that was about to fire.
 
 ## UI conventions
 

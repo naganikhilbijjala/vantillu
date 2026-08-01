@@ -5,12 +5,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackLink } from '../../src/components/BackLink';
 import { CookTimeline } from '../../src/components/CookTimeline';
 import { IntervalGauge } from '../../src/components/IntervalGauge';
+import { PrepSection } from '../../src/components/PrepSection';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
 import { Recipe } from '../../src/components/Recipe';
 import { StatGrid, StatTile } from '../../src/components/StatTile';
 import type { CookTimelineEntry } from '../../src/db/cookModel';
 import { type DishListItem, patternSummary } from '../../src/db/dishesModel';
+import type { DishPrepStatus } from '../../src/db/prepModel';
+import { discardPrep, startPrepForDish } from '../../src/db/queries/prep';
 import { useDish } from '../../src/hooks/useDishes';
+import { useRequestNotificationPermission } from '../../src/hooks/useNotificationPermission';
 import { border, layout, radius, space, type Theme } from '../../src/theme/tokens';
 import { useTheme, useThemedStyles } from '../../src/theme/useTheme';
 
@@ -33,7 +37,7 @@ export default function DishDetail() {
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { dish, timeline, isReady, error } = useDish(id);
+  const { dish, timeline, prep, now, isReady, error } = useDish(id);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -56,7 +60,7 @@ export default function DishDetail() {
             </View>
           ) : null
         ) : (
-          <Body dish={dish} timeline={timeline} />
+          <Body dish={dish} timeline={timeline} prep={prep} now={now} />
         )}
       </ScrollView>
     </SafeAreaView>
@@ -66,13 +70,18 @@ export default function DishDetail() {
 function Body({
   dish,
   timeline,
+  prep,
+  now,
 }: {
   dish: DishListItem;
   timeline: readonly CookTimelineEntry[];
+  prep: DishPrepStatus | null;
+  now: Date;
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
   const router = useRouter();
+  const { request: requestNotifications } = useRequestNotificationPermission();
 
   // Role, effort, and the prep it needs — the three things that decide when it is cookable.
   const eyebrow = [dish.roleLabel, dish.effort, dish.prepLabel]
@@ -144,6 +153,30 @@ function Body({
       </StatGrid>
 
       <Text style={styles.slots}>{slots}</Text>
+
+      {/* Only for a dish that needs prep, which is a handful of them. This is the section
+          that makes the hard exclusion answerable: Today says the dish is held back for
+          want of batter, and this is where the batter gets started (SPEC §20.4). */}
+      {prep === null ? null : (
+        <>
+          <Text style={styles.heading}>Prep</Text>
+          <PrepSection
+            status={prep}
+            now={now}
+            onStart={() => {
+              startPrepForDish(dish);
+              // Asked here rather than at launch: this is the first moment the app has
+              // something to say, and the first moment the request explains itself
+              // (SPEC §20.5). The prep is recorded either way — a denied permission
+              // costs the reminder, never the feature.
+              void requestNotifications();
+            }}
+            onDiscard={() => {
+              if (prep.prepId !== null) discardPrep(prep.prepId);
+            }}
+          />
+        </>
+      )}
 
       <Text style={styles.heading}>Recipe</Text>
       <Recipe

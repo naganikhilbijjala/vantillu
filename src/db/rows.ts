@@ -30,6 +30,8 @@ export interface DishRow {
   minutes: number | null;
   isVeg: boolean;
   prepKind: string | null;
+  /** How far ahead the prep has to start. What a reminder is measured back from (§20.2). */
+  prepLeadHours: number | null;
   prepLabel: string | null;
   usesLeftoverRice: boolean;
   season: string | null;

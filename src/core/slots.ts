@@ -1,4 +1,4 @@
-import { addDays, format, setHours, startOfHour } from 'date-fns';
+import { addDays, format, setHours, startOfHour, subHours } from 'date-fns';
 import type { Effort, Season, Slot } from './types';
 
 /**
@@ -97,6 +97,90 @@ export function nextSlotBoundary(date: Date): Date {
   const laterToday = SLOT_BOUNDARY_HOURS.find((boundary) => boundary > hour);
   const base = laterToday === undefined ? addDays(date, 1) : date;
   return startOfHour(setHours(base, laterToday ?? SLOT_BOUNDARY_HOURS[0]));
+}
+
+// ---------------------------------------------------------------------------
+// Planning against the clock, rather than reading it (SPEC §20.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * The hour you would actually start cooking each meal.
+ *
+ * A second table rather than a reuse of `SLOT_BOUNDARY_HOURS`, because the two answer
+ * different questions. Those hours decide *which meal it is now* and so have to cover the
+ * whole day — breakfast is detected from 04:00, and nobody grinds batter at four in the
+ * morning. These decide *when a meal gets made*, which is what a prep reminder has to be
+ * measured back from.
+ */
+export const SLOT_COOK_HOUR: Record<Slot, number> = {
+  breakfast: 7,
+  lunch: 12,
+  dinner: 19,
+  snack: 16,
+};
+
+/** Nothing the app schedules may fire between these hours. */
+export const QUIET_START_HOUR = 22;
+export const QUIET_END_HOUR = 7;
+/** Where a nudge inside the quiet window is moved back to. */
+export const QUIET_MOVED_TO_HOUR = 21;
+
+export function isQuietHour(hour: number): boolean {
+  return hour >= QUIET_START_HOUR || hour < QUIET_END_HOUR;
+}
+
+/** The next local moment `slot` would be cooked, strictly after `from`. */
+export function nextSlotCookTime(slot: Slot, from: Date): Date {
+  const today = startOfHour(setHours(from, SLOT_COOK_HOUR[slot]));
+  return today > from ? today : addDays(today, 1);
+}
+
+/**
+ * A fire time inside quiet hours, moved to 21:00 of the evening that window began.
+ *
+ * **Always earlier, never later.** A soak that should have started at 23:00 is still worth
+ * starting at 21:00; the same reminder pushed forward to 07:00 arrives after the moment it
+ * was about, which is worse than not sending it. Moving a ferment a couple of hours early
+ * costs a slightly longer ferment and nothing else.
+ */
+export function clampOutOfQuietHours(at: Date): Date {
+  const hour = at.getHours();
+  if (!isQuietHour(hour)) return at;
+  const evening = hour < QUIET_END_HOUR ? addDays(at, -1) : at;
+  return startOfHour(setHours(evening, QUIET_MOVED_TO_HOUR));
+}
+
+/** How many occurrences of a slot to try before giving up on finding a future one. */
+const NUDGE_SEARCH_DAYS = 2;
+
+/**
+ * When to say "start the prep" for a dish valid at `slots` whose prep needs `leadHours`.
+ *
+ * The soonest chance the dish has, across every slot it is valid for: a tiffin is
+ * breakfast *and* dinner, and the useful reminder is the one for whichever comes first.
+ * Null when there is nothing to schedule — no slot, or no lead time to warn ahead of.
+ *
+ * Strictly in the future. The quiet-hour clamp can pull a time back past `from`, so each
+ * slot falls through to its next occurrence rather than returning a moment already gone.
+ */
+export function prepNudgeTime(
+  slots: readonly Slot[],
+  leadHours: number | null,
+  from: Date,
+): Date | null {
+  if (leadHours === null || leadHours <= 0) return null;
+
+  let best: Date | null = null;
+  for (const slot of slots) {
+    const first = nextSlotCookTime(slot, from);
+    for (let dayOffset = 0; dayOffset < NUDGE_SEARCH_DAYS; dayOffset++) {
+      const fireAt = clampOutOfQuietHours(subHours(addDays(first, dayOffset), leadHours));
+      if (fireAt <= from) continue;
+      if (best === null || fireAt < best) best = fireAt;
+      break;
+    }
+  }
+  return best;
 }
 
 /** Month is 1-based here — `getMonth()` is not. */

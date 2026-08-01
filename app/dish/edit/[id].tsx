@@ -12,6 +12,7 @@ import { PillToggle } from '../../../src/components/PillToggle';
 import { PrimaryButton } from '../../../src/components/PrimaryButton';
 import { SegmentedField } from '../../../src/components/SegmentedField';
 import { TextField } from '../../../src/components/TextField';
+import { PREP_DEFAULT_LEAD_HOURS } from '../../../src/core/prep';
 import type { Effort, Slot } from '../../../src/core/types';
 import {
   blankDishValues,
@@ -21,6 +22,8 @@ import {
   dishFormProblems,
   EFFORT_OPTIONS,
   hasDishEdits,
+  PREP_OPTIONS,
+  type PrepChoice,
   SLOT_OPTIONS,
   toDishFormInput,
 } from '../../../src/db/dishModel';
@@ -117,6 +120,7 @@ type FieldKey =
   | 'altName'
   | 'primaryIngredient'
   | 'minutes'
+  | 'prepLeadHours'
   | 'ingredients'
   | 'method'
   | 'notes';
@@ -379,6 +383,39 @@ function DishForm({
             onPress={() => set('isVeg', !input.isVeg)}
           />
         </View>
+
+        {/* Asked for since Phase 9, and not before, because this field **hides the dish**
+            until its prep is going (SPEC §5.2). It was safe to add once there was a way to
+            start prep and a Today section that says why a dish is missing — before that it
+            was a switch for making a dish disappear with no way to find out why (§19.2). */}
+        <SegmentedField
+          label="Needs prep"
+          options={PREP_OPTIONS}
+          value={input.prepKind}
+          onChange={(prepKind: PrepChoice) => {
+            set('prepKind', prepKind);
+            // A sensible lead time comes with the choice rather than being a second thing
+            // to know; anything already typed is left alone.
+            if (prepKind !== 'none' && input.prepLeadHours.trim() === '') {
+              set('prepLeadHours', String(PREP_DEFAULT_LEAD_HOURS[prepKind]));
+            }
+          }}
+        />
+
+        {input.prepKind === 'none' ? null : (
+          <View onLayout={measure('prepLeadHours')}>
+            <TextField
+              label="Hours ahead"
+              value={input.prepLeadHours}
+              onChangeText={(value) => set('prepLeadHours', value)}
+              placeholder="8"
+              hint="How long before you cook it. This is when the reminder arrives."
+              multiline={false}
+              keyboardType="number-pad"
+              {...focusProps('prepLeadHours')}
+            />
+          </View>
+        )}
 
         <View style={styles.rule} />
 

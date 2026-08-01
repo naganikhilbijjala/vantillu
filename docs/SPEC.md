@@ -330,6 +330,26 @@ States: **pending** (`now < readyAt`) → **live** → **expiring soon** (within
 `expiresAt`) → **expired** (hidden from the banner, rows retained). Expired rows are
 pruned on app start once older than 30 days.
 
+Phase 9 fixed three things about that sentence that were left implicit.
+
+**Nothing writes a state.** All four are readings of two timestamps against the clock, made
+on every render in `src/db/prepModel.ts`. A status column would be a stored derived value
+(hard rule 2) needing something to come along and update it, which on a phone that spends
+most of its life asleep is exactly what drifts. `prepPhaseAt` is the one definition; the
+Today banner, the dish's Prep section and the reminder planner all read it.
+
+**The prune is a hard delete**, unlike every other delete in the app (§11.3). A tombstone
+exists so a later merge cannot resurrect something removed on purpose, and a prep row has
+nothing worth resurrecting — it is ephemeral state about one fridge on one day, not history.
+Keeping a tombstone per soak would grow a table forever to record that some lentils were
+once wet.
+
+**A live row can also be ended by hand** — "Used it up", on the banner and in the dish's
+Prep section, a soft delete. It is needed because logging a cook deliberately does *not*
+consume prep (§16.4): one batch of batter makes dosa on Tuesday and idli on Wednesday, so
+only the person who looked in the fridge can say it is gone. No confirmation — it destroys
+no history, only a claim about the fridge, and starting again is one tap.
+
 ### 5.4 Seed mapping
 
 `assets/seed_dishes.json` predates this model and uses a `prep` enum. The loader maps:
@@ -1115,19 +1135,38 @@ The Save button is disabled while either is missing, and a line above it says wh
 — give it a name and pick at least one meal."* A disabled button with no explanation is a
 dead end you have to guess your way out of.
 
-### 19.2 Seven fields the form cannot set, and therefore must not clear
+### 19.2 Four fields the form cannot set, and therefore must not clear
 
-`prepKind`, `prepLeadHours`, `prepLabel`, `season`, `usesLeftoverRice`, `isFestive` and
-`source` are **absent from the update**, not written as null. The seed sets them; the form
-does not ask; leaving them out of the UPDATE statement is what stops fixing a typo in
-"Dosa" from silently wiping the fact that it needs batter.
+`season`, `usesLeftoverRice`, `isFestive` and `source` are **absent from the update**, not
+written as null. The seed sets them; the form does not ask; leaving them out of the UPDATE
+statement is what stops fixing a typo in "Dosa" from silently wiping them.
 
-A dish added by hand therefore has none of them: no prep to wait for, no season, no
-leftover-rice boost. That is the honest default — they are all claims about the dish that
-nobody has made yet — and each has a real cost to expose. `prepKind` in particular
-**hard-excludes** a dish until a matching live `prep_state` row exists (§5.2), so offering
-it in a form before Phase 9 builds the prep writer would let someone hide a dish from
-themselves with no way to find out why. Revisit with Phase 9.
+A dish added by hand therefore has none of them: no season, no leftover-rice boost. That is
+the honest default — they are all claims about the dish that nobody has made yet.
+
+**The three prep columns were on that list until Phase 9 and are not any more.** The reason
+they were on it was never that prep is unimportant; it was that `prepKind` **hard-excludes**
+a dish until a matching live `prep_state` row exists (§5.2), and before there was any way to
+start prep, a field that hid a dish with no way to un-hide it was a trap. Phase 9 built the
+way out — the Prep section on the detail screen (§20.4) — and Phase 8 had already made the
+gap load-bearing: with the seed no longer inserting itself, a hand-added dosa could never
+say it needed batter at all.
+
+So the form asks two things, and the three columns move together:
+
+- **Needs prep** — none · soak · ferment · marinate. The default is none.
+- **Hours ahead** — shown only once a kind is picked, prefilled from `PREP_DEFAULT_LEAD_HOURS`
+  and editable. Dropped rather than rejected when it is not a plain positive number, like
+  `minutes`: a dish with a kind and no lead time is still correct, it simply gets no reminder.
+- **`prepLabel` is carried through, never rendered.** The seed writes wording like "soak
+  overnight" that the held-back note and the prep banner both use, so the form has to hold it
+  or saving would discard it. It gets no field because `PREP_KIND_NOUN` and
+  `PREP_KIND_ACTION` cover every place a label is needed, and a fourth prep input on a form
+  whose promise is "a name and a meal is all it takes" costs more than the wording is worth.
+
+Clearing the kind clears the lead time and the label with it. A dish still carrying "soak
+overnight" after being told it needs no prep would say so in its own eyebrow and in the
+held-back note, describing a soak that can never happen.
 
 `minutes` is display-only (§1.2), so a value that is not a plain positive number is
 **dropped rather than rejected**. Being unable to save a dish over a typo in the one field
@@ -1199,3 +1238,150 @@ cooked — which is why it came first.
 - **Roles are still not editable.** §1.1 says they are renameable "later", and everything
   downstream already reads the label and the flag from `role_config` rather than from the
   string, so the day that screen arrives nothing else has to change.
+
+---
+
+## 20. Prep reminders
+
+Local notifications, and the only part of the app whose output arrives hours after anyone
+looked at it. Nothing leaves the device: no push token, no server, no account (hard rule 5).
+
+Two kinds, and only two.
+
+- **A prep nudge** — *"Start the soak for Rajma."* Sent when a dish that needs prep is
+  overdue and nothing is going.
+- **A ready alert** — *"Batter is ready."* Sent at the moment a pending row becomes usable.
+
+**There is deliberately no expiry notification.** The banner already turns turmeric and
+counts down the hours (§5.2), and a push saying the batter is about to die is a complaint
+about something that can no longer be prevented.
+
+### 20.1 What earns a nudge
+
+All five, or nothing is sent:
+
+1. `prepKind` is set, and so is a `prepLeadHours` above zero.
+2. The dish has at least one meal slot, is not archived, and is in the repertoire.
+3. **It is due or overdue** — `stalenessState` says so, which means a null median and a
+   median of 0 both read as "no rhythm" here exactly as they do everywhere else (§3).
+4. **Nothing is already going**: no live *or* pending `prep_state` row matches its pair.
+5. The cooldown in §20.3 has passed.
+
+Rule 3 is the one worth stating twice. A dish you have never cooked makes no claim to be
+missing, and the whole app is built on the user's own rhythm — a reminder at nine at night
+about a dish nobody has made is the app inventing a preference. The same instinct as
+"suggestions and staleness are claims about your own cooking" (§18.1).
+
+### 20.2 When it fires
+
+Measured back from **when the meal gets cooked**, which is a different table from the slot
+detection hours in §2.2. Those cover the whole day so the clock can always name a meal;
+breakfast is detected from 04:00 and nobody grinds batter then.
+
+| Slot | Cook hour |
+|---|---|
+| `breakfast` | 07:00 |
+| `lunch` | 12:00 |
+| `dinner` | 19:00 |
+| `snack` | 16:00 |
+
+`fireAt = nextCookTime(slot) − prepLeadHours`, taken across every slot the dish is valid
+for and resolved to the **soonest future** one. A tiffin is breakfast *and* dinner, and the
+useful reminder is the one for whichever comes first.
+
+**Quiet hours are 22:00–06:59**, and a fire time inside them moves to **21:00 of the evening
+that window began** — always earlier, never later. A soak that should have started at 23:00
+is still worth starting at 21:00; the same reminder pushed forward to 07:00 arrives after
+the moment it was about. Moving a ferment a couple of hours early costs a slightly longer
+ferment and nothing else.
+
+That clamp is what makes the canonical case fall out: breakfast at 07:00 minus an 8-hour
+soak is 23:00, which is quiet, so **an overnight soak for breakfast is a 9 p.m. reminder**.
+
+### 20.3 Once every few days, not once a night
+
+A dish that is overdue and needs an overnight soak stays overdue until it is cooked, so
+without a cooldown it would be brought up **every single night**. That is nagging — the one
+thing the empty states, the held-back note and the 3-point rating all go out of their way
+not to be. One setting row, `prepNudgedAt`, holds `dishId → the moment last scheduled`, and
+a dish is skipped while a new candidate time is within **3 days** of it.
+
+Two details make that safe:
+
+- **The marker is written after the notifications exist**, never before. A failed schedule
+  must not be able to silence a dish for three days on the strength of a reminder nobody saw.
+- **A candidate time equal to the stored one is never skipped.** Scheduling records when the
+  reminder fires, and that write comes straight back through the live query as new input;
+  without the equality check the plan would drop the reminder it had just made and the next
+  sync would cancel a notification nobody had seen.
+
+**At most 6 reminders may be outstanding**, most overdue first. iOS caps pending local
+notifications at 64, so this is nowhere near a technical limit — it is the point past which
+an evening's worth of reminders stops being useful. What the cap dropped is stated in dev
+tools rather than silently lost.
+
+### 20.4 Where prep gets started
+
+**A Prep section on the dish detail screen**, for a dish with `prepKind` and no other. It
+states what is going — nothing, started and ready at a named time, ready now and good
+through a named day, or ready now with hours left — and carries one button: *"Start the
+soak"* / *"Grind the batter"* / *"Start marinating"*, or *"Used it up"* once something is
+going.
+
+This is what makes the hard exclusion answerable. Today already says the dish is held back
+for want of batter (§4.6); before this there was nowhere to go and do something about it,
+and `prep_state` had no writer outside dev tools.
+
+**An expired row reads exactly like no row at all.** From the cook's point of view it is the
+same fact — there is nothing in the fridge — and a screen that distinguished them would be
+reporting on the database rather than on the kitchen.
+
+The section is **absent** for a dish that needs no prep, which is most of them. A "no prep
+needed" line under every dal is a completion meter on data nobody entered (§17.2).
+
+### 20.5 Permission is asked for by a tap, never by a launch
+
+The scheduler only ever schedules against a permission that has **already** been granted. It
+never prompts. The request happens when the user starts a dish's prep — the first moment the
+app has anything to say and the first moment the request explains itself. A cold permission
+dialog on first launch is how an app gets denied forever, and it would land during
+onboarding, which asks nothing (§18.3).
+
+The consequence is deliberate: someone who never touches a prep-ahead dish is never asked
+and never notified, which is the right outcome for someone the feature is not for. **A denied
+permission costs the reminder and never the feature** — the prep is still recorded, the
+banner still appears, the dish still comes back into rotation.
+
+Android 13+ needs `POST_NOTIFICATIONS` at runtime and iOS needs an explicit request;
+`requestPermissionsAsync` covers both, and both return the existing answer rather than
+re-prompting once the user has decided. The permission lives in a small store rather than in
+component state, because the screen that asks and the scheduler that acts on it must not
+disagree.
+
+### 20.6 Syncing, not rescheduling
+
+Each planned notification has an identifier that encodes **what fires and when**
+(`prep-nudge:<dishId>:<localIso>`). Keeping the OS in step is then a set difference: cancel
+ours that the plan no longer wants, schedule what it wants and the OS does not hold.
+
+Cancel-all-and-reschedule would be shorter and wrong — it would drop and re-add a reminder
+that was about to fire, every time the app opened. Only identifiers the planner minted are
+ever eligible for cancellation, and a moment that has already passed is never scheduled: it
+would fire immediately, which is worse than not firing.
+
+The sync runs from the **root layout**, below the onboarding gate. A reminder about
+tomorrow's breakfast must not depend on which tab happened to be mounted when the app was
+last closed, and there is nothing to plan against until there is a repertoire.
+
+### 20.7 What it deliberately does not do
+
+- **No daily "what's for dinner" reminder.** The app answers a question you came to it with;
+  a notification at 6 p.m. every day would make it one that interrupts you instead.
+- **No "you haven't logged anything in a while".** Streak-keeping is a different app, and a
+  log nobody wanted to write is worse than a gap.
+- **No notification when a dish simply becomes overdue.** Overdue is what the Today screen is
+  for. Only prep earns a notification, because only prep has a deadline the app knows and the
+  user cannot recover once it passes.
+- **No `expo-notifications` config plugin.** It customises the Android icon and accent
+  colour, which would mean a new dev build for cosmetics; the module works without it.
+  Worth adding at the Phase 12 release build, not before.

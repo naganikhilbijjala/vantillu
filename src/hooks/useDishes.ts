@@ -7,12 +7,14 @@ import {
   sortByStaleness,
   usedRoles,
 } from '../db/dishesModel';
+import { type DishPrepStatus, dishPrepStatus } from '../db/prepModel';
 import { roleConfigQuery } from '../db/queries/roles';
 import {
   cookEventsForDishQuery,
   cookEventsQuery,
   dishesQuery,
   dishSlotsQuery,
+  prepStatesQuery,
 } from '../db/queries/tables';
 import type { RoleConfigRow } from '../db/roles';
 import { useNow } from './useNow';
@@ -76,6 +78,8 @@ export interface DishDetailModel {
   dish: DishListItem | undefined;
   /** Newest cook first. Every cook, not only the annotated ones. */
   timeline: CookTimelineEntry[];
+  /** Null for a dish that needs no prep, which is most of them. */
+  prep: DishPrepStatus | null;
   isReady: boolean;
   error: Error | undefined;
 }
@@ -94,18 +98,27 @@ export function useDish(id: string | undefined): DishDetailModel {
   // Deps carry the id, or this stays pinned to whichever dish was opened first. The empty
   // string is never a real UUID, so the query is harmless while the param resolves.
   const events = useLiveQuery(cookEventsForDishQuery(id ?? ''), [id]);
+  const prepRows = useLiveQuery(prepStatesQuery());
+
+  const dish = useMemo(
+    () => (id === undefined ? undefined : dishes.find((d) => d.id === id)),
+    [dishes, id],
+  );
 
   return {
     now,
-    dish: useMemo(
-      () => (id === undefined ? undefined : dishes.find((d) => d.id === id)),
-      [dishes, id],
-    ),
+    dish,
     timeline: useMemo(
       () => buildCookTimeline(events.data ?? [], now),
       [events.data, now],
     ),
+    // `DishListItem` carries the five fields `PrepDish` asks for, so the status comes from
+    // the row already on screen rather than from a second read of the dish table.
+    prep: useMemo(
+      () => (dish === undefined ? null : dishPrepStatus(dish, prepRows.data ?? [], now)),
+      [dish, prepRows.data, now],
+    ),
     isReady,
-    error: error ?? events.error,
+    error: error ?? events.error ?? prepRows.error,
   };
 }

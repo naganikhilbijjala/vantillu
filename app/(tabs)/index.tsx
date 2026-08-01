@@ -12,6 +12,7 @@ import { PrepBanner } from '../../src/components/PrepBanner';
 import { SlotSwitcher } from '../../src/components/SlotSwitcher';
 import { DEFAULT_SUGGESTION_COUNT } from '../../src/core/scoring';
 import type { Slot } from '../../src/core/types';
+import { discardPrep } from '../../src/db/queries/prep';
 import { useToday } from '../../src/hooks/useToday';
 import { border, layout, radius, space, type Theme } from '../../src/theme/tokens';
 import { useThemedStyles } from '../../src/theme/useTheme';
@@ -112,7 +113,10 @@ export default function Today() {
 
         {livePrep.map((prep) => (
           <View key={prep.id} style={styles.gutter}>
-            <PrepBanner prep={prep} now={now} />
+            {/* Logging a cook deliberately does not consume prep — one batch of batter
+                makes dosa on Tuesday and idli on Wednesday (SPEC §16.4) — so the only
+                thing that can say it is gone is the person who looked in the fridge. */}
+            <PrepBanner prep={prep} now={now} onDiscard={() => discardPrep(prep.id)} />
           </View>
         ))}
 
