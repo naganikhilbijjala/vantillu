@@ -698,7 +698,7 @@ Fixing them is a one-line change per value in `tokens.ts` and a product decision
 task. Until then, the honest statement is that dark mode meets AA and light mode does not,
 in three places, and nothing new may be added below the floors.
 
-### 14.4 Two rules that are easy to break
+### 14.4 Three rules that are easy to break
 
 `StyleSheet.create` must not run at module scope any more — it would capture one palette
 for the life of the process. Styles come from `useThemedStyles(makeStyles)`, which builds
@@ -707,6 +707,17 @@ renders.
 
 A hard-coded hex outside `tokens.ts` will look correct in whichever scheme it was written
 for and wrong in the other. There is no third place for colour.
+
+**No `Alert.alert`, and no other platform-drawn UI.** It has no styling surface at all, so
+it lands in Roboto and Material blue in the middle of a screen built out of brushed steel
+and turmeric — and it follows the *system* scheme rather than the one the rest of the app
+resolved, so on a dark device it can arrive in light mode. `src/components/ConfirmDialog.tsx`
+is the replacement, and it keeps the two behaviours that make a native dialog feel safe: the
+backdrop and the hardware back both **cancel**, never confirm.
+
+The scrim behind it is the one colour in `Palette` exempt from the floors above, because
+nothing is drawn on it. It is heavier in dark than in light — there is far less distance
+between a near-black screen and a dimmed one.
 
 ---
 
@@ -1163,7 +1174,8 @@ later merge resurrect things (§11.3). If the dish is gone, so is the claim that
 Three details that are the difference between a delete and a trap:
 
 - **The count is in the confirmation**, not left for the user to remember. This is the one
-  action in the app that destroys history and it must not be able to do so quietly.
+  action in the app that destroys history and it must not be able to do so quietly. The
+  confirmation is the app's own dialog, not `Alert.alert` — see §14.4.
 - **It sits below Cancel, below a rule**, never where a thumb aiming for Save might land.
 - **It exits to the list**, not back to the detail screen of a dish that no longer exists.
   That screen handles the miss gracefully, which is precisely the problem — it would read as

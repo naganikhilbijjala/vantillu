@@ -2,10 +2,11 @@ import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Trash2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
+import { BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackLink } from '../../../src/components/BackLink';
 import { ChipField } from '../../../src/components/ChipField';
+import { ConfirmDialog } from '../../../src/components/ConfirmDialog';
 import { GhostButton } from '../../../src/components/GhostButton';
 import { PillToggle } from '../../../src/components/PillToggle';
 import { PrimaryButton } from '../../../src/components/PrimaryButton';
@@ -183,6 +184,9 @@ function DishForm({
     });
   }, [focused, keyboardInset]);
 
+  /** Which question is on screen. Both are drawn by the app, not by the platform. */
+  const [asking, setAsking] = useState<'discard' | 'delete' | null>(null);
+
   /**
    * Leaving without saving, with a confirmation only when there is something to lose.
    *
@@ -195,26 +199,24 @@ function DishForm({
       onCancel();
       return;
     }
-    Alert.alert(
-      isNew ? 'Discard this dish?' : 'Discard changes?',
-      "The text you've typed won't be saved.",
-      [
-        { text: 'Keep editing', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: onCancel },
-      ],
-    );
-  }, [edited, isNew, onCancel]);
+    setAsking('discard');
+  }, [edited, onCancel]);
 
   // Android's hardware back would otherwise discard silently. iOS has no back gesture on
   // this route — the root layout disables it — so Save and Cancel are the only ways out of
   // an edited form on both platforms.
+  //
+  // The dialog gets first refusal. `Modal` installs its own back handler while it is up and
+  // ours would otherwise race it; closing the question here makes the outcome the same
+  // whichever runs first, and back-dismisses-the-dialog is what it should do regardless.
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      guardedExit();
+      if (asking !== null) setAsking(null);
+      else guardedExit();
       return true;
     });
     return () => subscription.remove();
-  }, [guardedExit]);
+  }, [guardedExit, asking]);
 
   function focusProps(key: FieldKey) {
     return {
@@ -246,33 +248,17 @@ function DishForm({
   }
 
   /**
-   * Deleting, behind a confirmation that says what it costs.
+   * What deleting costs, said before it happens.
    *
    * This is the one action in the app that destroys history, so the count goes in the
    * message rather than being left for the user to remember. Soft underneath (SPEC §11.3),
    * but "recoverable by editing the database" is not something to offer as reassurance —
    * from in here it is gone.
    */
-  function confirmDelete() {
-    if (dishId === undefined) return;
-    Alert.alert(
-      `Delete ${saved.name}?`,
-      cookCount === 0
-        ? "Nothing has been logged against it, so there's no history to lose. This can't be undone."
-        : `This also removes ${cookCount} logged ${cookCount === 1 ? 'cook' : 'cooks'} and any notes on them. This can't be undone.`,
-      [
-        { text: 'Keep it', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteDish(dishId);
-            onDeleted();
-          },
-        },
-      ],
-    );
-  }
+  const deleteMessage =
+    cookCount === 0
+      ? "Nothing has been logged against it, so there's no history to lose. This can't be undone."
+      : `This also removes ${cookCount} logged ${cookCount === 1 ? 'cook' : 'cooks'} and any notes on them. This can't be undone.`;
 
   return (
     <ScrollView
@@ -456,14 +442,44 @@ function DishForm({
         <View style={styles.danger}>
           <Pressable
             accessibilityRole="button"
-            onPress={confirmDelete}
+            onPress={() => setAsking('delete')}
             style={({ pressed }) => [styles.deleteButton, pressed && styles.rowPressed]}
           >
-            <Trash2 size={15} strokeWidth={1.7} color={colors.gongura} />
+            <Trash2 size={15} strokeWidth={1.7} color={colors.gonguraInk} />
             <Text style={styles.deleteLabel}>Delete this dish</Text>
           </Pressable>
         </View>
       )}
+
+      <ConfirmDialog
+        visible={asking === 'discard'}
+        title={isNew ? 'Discard this dish?' : 'Discard changes?'}
+        message="The text you've typed won't be saved."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard"
+        destructive
+        onCancel={() => setAsking(null)}
+        onConfirm={() => {
+          setAsking(null);
+          onCancel();
+        }}
+      />
+
+      <ConfirmDialog
+        visible={asking === 'delete'}
+        title={`Delete ${saved.name}?`}
+        message={deleteMessage}
+        cancelLabel="Keep it"
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => setAsking(null)}
+        onConfirm={() => {
+          if (dishId === undefined) return;
+          setAsking(null);
+          deleteDish(dishId);
+          onDeleted();
+        }}
+      />
     </ScrollView>
   );
 }
@@ -535,10 +551,12 @@ const makeStyles = ({ colors, text }: Theme) => ({
   rowPressed: {
     backgroundColor: colors.steel1,
   },
+  // The `Ink` member of the accent pair, not the graphic one: gongura as text on `steel1`
+  // measures 4.48:1 after dark, a hair under the 4.5 floor (SPEC §14.3).
   deleteLabel: {
     ...text.control,
     fontSize: 13,
-    color: colors.gongura,
+    color: colors.gonguraInk,
   },
   error: {
     ...text.bodySmall,

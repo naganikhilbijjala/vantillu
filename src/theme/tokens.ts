@@ -47,6 +47,18 @@ export interface Palette {
    */
   steelPressed: string;
 
+  /**
+   * The dim behind a modal. Not a member of the `steel` triple — it sits *over* every
+   * surface rather than being one, and it is deliberately translucent so the screen you
+   * are being asked about stays legible underneath.
+   *
+   * The only colour in here exempt from §14.3's contrast floors, because it carries no
+   * information: nothing is ever drawn on the scrim, only under it and above it. What it
+   * has to do instead is separate, which is why the dark value is heavier — a dim over a
+   * near-black screen has less room to work with than one over a near-white screen.
+   */
+  scrim: string;
+
   /** Stronger divider, and the dashed outline of an empty state. */
   line: string;
   /** Default divider and card border. */
@@ -84,6 +96,9 @@ const light: Palette = {
   steel2: '#FBFCFC',
   steelPressed: '#FBFCFC',
 
+  // The ink hue rather than pure black, so the dim reads as the same material as the rest.
+  scrim: 'rgba(21, 27, 25, 0.36)',
+
   line: '#CBD2D0',
   lineSoft: '#DDE3E1',
 
@@ -120,6 +135,10 @@ const dark: Palette = {
   steel1: '#1B211F',
   steel2: '#131817',
   steelPressed: '#262E2B',
+
+  // Heavier than light mode's: there is far less distance between a near-black screen and
+  // a dimmed one, so a 36% veil would barely register.
+  scrim: 'rgba(0, 0, 0, 0.62)',
 
   line: '#3D4744',
   lineSoft: '#2C3432',

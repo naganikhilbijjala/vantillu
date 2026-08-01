@@ -144,6 +144,10 @@ derived from food. Deliberately **not** warm cream and terracotta.
 - **Never call `StyleSheet.create` at module scope** — it captures one palette forever.
   Write `const makeStyles = ({ colors, text }: Theme) => ({ … })` at module scope and
   `const styles = useThemedStyles(makeStyles)` in the component.
+- **No `Alert.alert`, no platform-drawn UI.** It ignores the theme entirely and follows the
+  *system* scheme, so it can arrive in light mode on a dark device. Use
+  `src/components/ConfirmDialog.tsx`; backdrop and hardware back always cancel, never
+  confirm (`docs/SPEC.md` §14.4).
 - The mockup is light-only and stays authoritative for light. Dark is designed, so a new
   colour needs a contrast check in both schemes: 4.5:1 for body text, 3:1 for graphics.
   Three *existing* light values miss those floors and are knowingly left alone —

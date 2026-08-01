@@ -1,8 +1,10 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackLink } from '../src/components/BackLink';
+import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { resetOnboarding } from '../src/db/queries/onboarding';
 import { clearAllPrep, startPrep } from '../src/db/queries/prep';
 import { roleConfigQuery } from '../src/db/queries/roles';
@@ -43,6 +45,7 @@ export default function Debug() {
   const router = useRouter();
   const { data: roles, error: roleError } = useLiveQuery(roleConfigQuery());
   const { data: prep, error: prepError } = useLiveQuery(prepStatesQuery());
+  const [asking, setAsking] = useState(false);
 
   const error = roleError ?? prepError;
   const alwaysAvailable = (roles ?? []).filter((r) => r.isAlwaysAvailable);
@@ -112,25 +115,25 @@ export default function Debug() {
           <Pressable
             accessibilityRole="button"
             style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-            onPress={() =>
-              Alert.alert(
-                'Start over?',
-                'Every dish, cook event and setting is deleted. There is no undo.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Delete everything',
-                    style: 'destructive',
-                    onPress: () => resetOnboarding(),
-                  },
-                ],
-              )
-            }
+            onPress={() => setAsking(true)}
           >
             <Text style={styles.buttonLabel}>Reset onboarding</Text>
           </Pressable>
         </View>
       </ScrollView>
+
+      <ConfirmDialog
+        visible={asking}
+        title="Start over?"
+        message="Every dish, cook event and setting is deleted. There is no undo."
+        confirmLabel="Delete everything"
+        destructive
+        onCancel={() => setAsking(false)}
+        onConfirm={() => {
+          setAsking(false);
+          resetOnboarding();
+        }}
+      />
     </SafeAreaView>
   );
 }
