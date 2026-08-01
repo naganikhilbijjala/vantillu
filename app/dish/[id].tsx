@@ -57,6 +57,7 @@ export default function DishDetail() {
 
 function Body({ dish }: { dish: DishListItem }) {
   const styles = useThemedStyles(makeStyles);
+  const router = useRouter();
 
   // Role, effort, and the prep it needs — the three things that decide when it is cookable.
   const eyebrow = [dish.roleLabel, dish.effort, dish.prepLabel]
@@ -113,9 +114,12 @@ function Body({ dish }: { dish: DishListItem }) {
 
       <Text style={styles.slots}>{slots}</Text>
 
-      {/* Phase 6 wires this to the log sheet, the same as the Today FAB. */}
+      {/* Also the one-tap path: the dish is known, so the sheet skips the picker. */}
       <View style={styles.action}>
-        <PrimaryButton label="Log a cook" />
+        <PrimaryButton
+          label="Log a cook"
+          onPress={() => router.push({ pathname: '/log', params: { dishId: dish.id } })}
+        />
       </View>
     </View>
   );

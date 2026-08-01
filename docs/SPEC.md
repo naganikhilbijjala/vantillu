@@ -741,3 +741,73 @@ supposed to look like a normal dish (§12, and the empty-state rule in `CLAUDE.m
 The detail screen is **pushed over** the tab group, not swapped into it, so the list keeps
 its scroll position, its role filter, and its search on the way back. That is why the filter
 and search are screen state rather than part of the data hook.
+
+---
+
+## 16. Logging a cook
+
+Added in Phase 6. This is the write the whole app exists to make easy.
+
+### 16.1 What "one tap from Today" means
+
+`CLAUDE.md` hard rule 6 says logging is one tap from the Today screen and no step may ever
+be added to that path. Phase 6 read that as a rule about the **entry**, not about the form:
+
+- Tapping a suggestion card, or a dish's **Log a cook** button, opens the sheet **straight on
+  the form** with the dish and the slot already right. One tap to get there, one to confirm.
+- The dish picker appears **only** when the caller genuinely does not know the dish, which is
+  the Today FAB alone.
+- Nothing may ever be inserted before that form on a path where the dish is known — no
+  confirmation step, no slot screen, no "are you sure".
+
+The alternative reading — a single tap writes the event outright — was rejected. It makes an
+accidental tap unrecoverable, and it throws away the rating and the tweak note, which is the
+data that eventually becomes the recipe (§7).
+
+### 16.2 What the sheet asks
+
+| Field | Default | Required |
+|---|---|---|
+| Dish | from the caller, or picked | yes |
+| Meal slot | the slot being *browsed*, else the clock | yes |
+| Rating | **nothing selected** | no |
+| Note for next time | empty | no |
+| Batch | off | no |
+
+**The slot defaults to what the user was looking at, not to the clock.** Those differ
+whenever Today's manual override is in force (§2.2), and tapping a lunch suggestion at 8pm
+means lunch. Where there is no slot context — the detail screen — it falls back to the clock,
+and then to a slot the dish is actually valid for, so a lunch-only dish reached in the
+evening does not silently record as dinner.
+
+**A rating is not pre-selected.** The mockup shows "Fine" pressed; that would record an
+opinion nobody gave. `cook_event.rating` is nullable precisely so "didn't say" is
+expressible, only a 1 moves the score anyway (§7), and the "a later unrated cook does not
+erase an earlier *not again*" rule in §4.3 is meaningless unless unrated cooks exist.
+Pressing the selected rating again clears it.
+
+The note is a plain multiline input. **No dictation button** — §12 stands, and the OS
+keyboard's mic is already there.
+
+### 16.3 Meals share a `meal_id`
+
+**Log it** writes one event with `meal_id = NULL`. **Log it and add another dish to this
+meal** writes the event, mints a `meal_id` if there isn't one, and returns to the picker
+holding it, so every dish in that sitting carries the same id.
+
+A standalone cook stays `NULL` rather than getting an id of its own: a group of one is not a
+group, and a table full of single-member meal ids makes "what did I eat with this"
+unanswerable later.
+
+### 16.4 What logging deliberately does *not* do
+
+- **It does not consume prep.** One batch of batter makes dosa on Tuesday and idli on
+  Wednesday, so a cook is no evidence the batter is gone. Prep expires on its shelf life
+  (§5.3); Phase 9 owns that lifecycle.
+- **It does not recompute or cache anything.** `daysSince`, `medianInterval` and `cookCount`
+  stay derived (hard rule 2). Every screen updates because `useLiveQuery` re-runs on a write
+  to `cook_event` — which is what makes the gauge move with no invalidation code at all.
+- **It does not capture a photo.** `cook_event.photo_uri` stays null. `expo-image-picker` is
+  a native module (§13), so adding it means rebuilding the dev client, and the column is
+  ready whenever that happens.
+- **It writes no rating by default**, per §16.2.

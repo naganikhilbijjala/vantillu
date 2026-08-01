@@ -3,6 +3,7 @@ import seedFile from '../assets/seed_dishes.json';
 import { buildSuggestions } from '../src/core/scoring';
 import { localDateKey } from '../src/core/slots';
 import type { Slot } from '../src/core/types';
+import { type LogCookInput, toCookEventRow } from '../src/db/cookModel';
 import {
   ALL_ROLES,
   buildDishList,
@@ -11,7 +12,7 @@ import {
   usedRoles,
 } from '../src/db/dishesModel';
 import { DEFAULT_ROLES } from '../src/db/roles';
-import type { DishRow, DishSlotRow, PrepStateRow } from '../src/db/rows';
+import type { CookEventRow, DishRow, DishSlotRow, PrepStateRow } from '../src/db/rows';
 import { toSettingMap } from '../src/db/settings';
 import { toLocalIso } from '../src/db/time';
 import { buildTodayModel } from '../src/db/todayModel';
@@ -84,8 +85,17 @@ const roles = DEFAULT_ROLES.map((role, sortOrder) => ({ ...role, sortOrder }));
 const MONDAY = day(2026, 7, 27, 12);
 
 function today(slot: Slot, now = MONDAY, prepStates: PrepStateRow[] = []) {
+  return todayWith([], slot, now, prepStates);
+}
+
+function todayWith(
+  cookEvents: readonly CookEventRow[],
+  slot: Slot,
+  now = MONDAY,
+  prepStates: PrepStateRow[] = [],
+) {
   const model = buildTodayModel(
-    { dishes, dishSlots, roles, cookEvents: [], prepStates, settings: toSettingMap([]) },
+    { dishes, dishSlots, roles, cookEvents, prepStates, settings: toSettingMap([]) },
     now,
     slot,
   );
@@ -270,5 +280,129 @@ describe('the repertoire list, against the real seed', () => {
 
     const names = normal.map((i) => i.name);
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The write/read round trip (Phase 6)
+// ---------------------------------------------------------------------------
+
+/**
+ * `toCookEventRow` writes and the two screen models read. Nothing type-checks that pairing
+ * end to end — `NewCookEventRow` is a structural superset of `CookEventRow`, so a wrong
+ * `cookedAt` format would compile and simply never parse. These run a real log through both
+ * readers, which is the closest thing to the phase's acceptance criterion that does not
+ * need a device: `useLiveQuery` supplies the *liveness*, this supplies the correctness.
+ */
+describe('logging a cook, read back', () => {
+  const EVENING = new Date(2026, 6, 27, 20, 14, 30);
+
+  /** Sambar — seeded, valid at every slot, so it survives any filter below. */
+  const sambar = dishes.find((d) => d.name === 'Sambar');
+
+  function logged(overrides: Partial<LogCookInput> = {}, at = EVENING) {
+    if (sambar === undefined) throw new Error('Sambar is missing from the seed');
+    return toCookEventRow(
+      {
+        dishId: sambar.id,
+        slot: 'dinner',
+        rating: null,
+        tweakNote: null,
+        isBatch: false,
+        mealId: null,
+        ...overrides,
+      },
+      'event-1',
+      at,
+    );
+  }
+
+  it('moves the dish to zero days since, cooked once', () => {
+    const event = logged();
+    const items = buildDishList(
+      { dishes, dishSlots, roles, cookEvents: [event] },
+      EVENING,
+    );
+    const item = items.find((i) => i.id === sambar?.id);
+
+    expect(item?.cookCount).toBe(1);
+    expect(item?.daysSince).toBe(0);
+    // One cook is not a rhythm, so the gauge stays hollow rather than inventing one.
+    expect(item?.medianInterval).toBeNull();
+    expect(item?.stalenessState).toBe('new');
+  });
+
+  it('is still today tomorrow morning — one calendar day, not 24 hours', () => {
+    // Logged at 20:14, read at 07:00 the next day: 10.75 elapsed hours, but a day boundary
+    // was crossed, so it reads as 1 (SPEC §2.1).
+    const items = buildDishList(
+      { dishes, dishSlots, roles, cookEvents: [logged()] },
+      new Date(2026, 6, 28, 7, 0),
+    );
+    expect(items.find((i) => i.id === sambar?.id)?.daysSince).toBe(1);
+  });
+
+  it('reaches the suggestion engine as a recent ingredient', () => {
+    // Sambar is toor dal. Logging it should sink every other toor dal dish by −4.0, which
+    // is the loop closing: a write changes what Today suggests.
+    const { model } = todayWith([logged()], 'lunch');
+    expect(model.ctx.recentIngredients).toContain('toor dal');
+  });
+
+  it('makes a batch cook fill its role', () => {
+    const plain = todayWith([logged()], 'lunch');
+    expect(plain.model.ctx.rolesFilledByBatch).toEqual([]);
+
+    const batched = todayWith([logged({ isBatch: true })], 'lunch');
+    expect(batched.model.ctx.rolesFilledByBatch).toContain(sambar?.role);
+  });
+
+  it('keeps a rating out of the history when none was given', () => {
+    const items = buildDishList(
+      { dishes, dishSlots, roles, cookEvents: [logged()] },
+      EVENING,
+    );
+    expect(items.find((i) => i.id === sambar?.id)?.lastRating).toBeNull();
+
+    const rated = buildDishList(
+      { dishes, dishSlots, roles, cookEvents: [logged({ rating: 1 })] },
+      EVENING,
+    );
+    expect(rated.find((i) => i.id === sambar?.id)?.lastRating).toBe(1);
+  });
+
+  it('groups a meal under one id without disturbing either dish', () => {
+    const meal = 'meal-1';
+    const rice = dishes.find((d) => d.name === 'Plain rice');
+    if (rice === undefined) throw new Error('Plain rice is missing from the seed');
+
+    const events = [
+      logged({ mealId: meal }),
+      toCookEventRow(
+        {
+          dishId: rice.id,
+          slot: 'dinner',
+          rating: null,
+          tweakNote: null,
+          isBatch: false,
+          mealId: meal,
+        },
+        'event-2',
+        EVENING,
+      ),
+    ];
+
+    expect(new Set(events.map((e) => e.mealId))).toEqual(new Set([meal]));
+
+    const items = buildDishList(
+      { dishes, dishSlots, roles, cookEvents: events },
+      EVENING,
+    );
+    expect(items.find((i) => i.id === sambar?.id)?.cookCount).toBe(1);
+    expect(items.find((i) => i.id === rice.id)?.cookCount).toBe(1);
+
+    // And the rice staple boost fires, which is the whole reason `staple` is its own role.
+    const { model } = todayWith(events, 'dinner');
+    expect(model.ctx.hadRiceStapleInLast24h).toBe(true);
   });
 });

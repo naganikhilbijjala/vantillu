@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,6 +48,7 @@ const MORE_LABEL = ['', 'Show one more', 'Show two more', 'Show three more'];
 
 export default function Today() {
   const styles = useThemedStyles(makeStyles);
+  const router = useRouter();
   const {
     now,
     slot,
@@ -137,6 +139,16 @@ export default function Today() {
                   daysSince={ranked.candidate.daysSince}
                   medianInterval={ranked.candidate.medianInterval}
                   reasons={ranked.reasons}
+                  // The one-tap path (hard rule 6): the dish is already known, so this
+                  // opens the log sheet straight on the form. Never a picker first.
+                  // `slot` carries the slot being *browsed*, which is not the clock while
+                  // an override is in force.
+                  onPress={() =>
+                    router.push({
+                      pathname: '/log',
+                      params: { dishId: ranked.candidate.id, slot },
+                    })
+                  }
                 />
               );
             })}
@@ -161,9 +173,8 @@ export default function Today() {
         )}
       </ScrollView>
 
-      {/* Phase 6 wires this to the log sheet. Present now because it is the screen's
-          primary action and the layout has to be built around it, not beside it. */}
-      <Fab />
+      {/* No dish yet, so this is the one entry that opens on the picker. */}
+      <Fab onPress={() => router.push({ pathname: '/log', params: { slot } })} />
     </SafeAreaView>
   );
 }

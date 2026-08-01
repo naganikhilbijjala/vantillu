@@ -13,7 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import migrations from '../drizzle/migrations';
 import { db } from '../src/db/client';
 import { seedDatabaseIfEmpty } from '../src/db/seed';
-import { layout, space, type Theme } from '../src/theme/tokens';
+import { layout, radius, space, type Theme } from '../src/theme/tokens';
 import { useTheme, useThemedStyles } from '../src/theme/useTheme';
 
 /**
@@ -75,7 +75,23 @@ export default function RootLayout() {
             headerShown: false,
             contentStyle: { backgroundColor: theme.colors.steel2 },
           }}
-        />
+        >
+          {/* Everything else is a push and needs no entry here; the log sheet is the one
+              screen with a different presentation. `formSheet` is a native bottom sheet on
+              both platforms in react-native-screens 4, which is what the mockup shows —
+              and a partial-height sheet keeps the Today screen visible behind it, so
+              logging never feels like leaving where you were. */}
+          <Stack.Screen
+            name="log"
+            options={{
+              presentation: 'formSheet',
+              sheetAllowedDetents: [0.75, 1],
+              sheetCornerRadius: radius.sheet,
+              sheetGrabberVisible: false,
+              gestureEnabled: true,
+            }}
+          />
+        </Stack>
       ) : (
         <BootProgress />
       )}

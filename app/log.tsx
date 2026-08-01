@@ -1,0 +1,373 @@
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { DishListRow } from '../src/components/DishListRow';
+import { GhostButton } from '../src/components/GhostButton';
+import { PillToggle } from '../src/components/PillToggle';
+import { PrimaryButton } from '../src/components/PrimaryButton';
+import { SearchField } from '../src/components/SearchField';
+import { SegmentedField } from '../src/components/SegmentedField';
+import { slotForDate } from '../src/core/slots';
+import type { Rating, Slot } from '../src/core/types';
+import { confirmationFor } from '../src/db/cookModel';
+import { ALL_ROLES, type DishListItem, filterDishes } from '../src/db/dishesModel';
+import { logCook, newMealId } from '../src/db/queries/cook';
+import { asSlot } from '../src/db/rows';
+import { useDishes } from '../src/hooks/useDishes';
+import { border, layout, radius, space, type Theme } from '../src/theme/tokens';
+import { useThemedStyles } from '../src/theme/useTheme';
+
+/**
+ * Log a cook.
+ *
+ * **One route, not two, and internal steps rather than pushed screens.** `IMPLEMENTATION.md`
+ * §3 sketched this as `log/[dishId].tsx`, but "add another dish to this meal" has to carry a
+ * `mealId` across a return to the dish picker, and threading that through route params to a
+ * second screen puts the meal grouping in the navigator instead of in one component.
+ *
+ * **Hard rule 6 governs the entry, not the form.** Arriving with a `dishId` — from a
+ * suggestion card, or from a dish's detail screen — opens straight on the form with the slot
+ * already right, so logging is one tap from Today and then one confirm. The picker only
+ * appears when the caller genuinely does not know the dish yet, which is the FAB. Nothing
+ * may ever be inserted before that form.
+ *
+ * Everything on the form is optional except the dish. A rating is not pre-selected: an
+ * unrated cook is a real thing to record, and defaulting to "Fine" would put an opinion
+ * nobody gave into the history (SPEC §7).
+ */
+export default function LogCook() {
+  const styles = useThemedStyles(makeStyles);
+  const router = useRouter();
+  const { dishId, slot: slotParam } = useLocalSearchParams<{
+    dishId?: string;
+    slot?: string;
+  }>();
+  const { dishes, now } = useDishes();
+
+  // The slot the *caller* was answering for, which is not the clock whenever Today's
+  // manual override is in force: tapping a lunch suggestion at 8pm means lunch. Falls back
+  // to the clock when the caller had no slot context, such as the detail screen.
+  const defaultSlot =
+    (slotParam === undefined ? null : asSlot(slotParam)) ?? slotForDate(now);
+
+  // The dish being logged. Set from the route when the caller knew it, otherwise picked.
+  const [selectedId, setSelectedId] = useState<string | undefined>(dishId);
+  // Non-null once the user says this cook is part of a meal, and shared from then on.
+  const [mealId, setMealId] = useState<string | null>(null);
+  const [justLogged, setJustLogged] = useState<string | null>(null);
+
+  const dish = useMemo(
+    () => dishes.find((d) => d.id === selectedId),
+    [dishes, selectedId],
+  );
+
+  return (
+    <KeyboardAvoidingView
+      // `padding` is right on iOS; Android's own adjustResize already handles the inset and
+      // doubling it pushes the sheet off screen (IMPLEMENTATION.md §7).
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.sheet}
+    >
+      <View style={styles.grab} />
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+      >
+        {dish === undefined ? (
+          <DishPicker
+            dishes={dishes}
+            mealId={mealId}
+            justLogged={justLogged}
+            onSelect={setSelectedId}
+            onCancel={() => router.back()}
+          />
+        ) : (
+          <CookForm
+            key={dish.id}
+            dish={dish}
+            defaultSlot={defaultSlot}
+            inMeal={mealId !== null}
+            onSubmit={(input, addAnother) => {
+              const meal = addAnother ? (mealId ?? newMealId()) : mealId;
+              logCook({ ...input, dishId: dish.id, mealId: meal });
+
+              if (!addAnother) {
+                router.back();
+                return;
+              }
+              // Stay open, keep the meal, and go back to the picker for the next dish.
+              setMealId(meal);
+              setJustLogged(confirmationFor(dish.name, dish.medianInterval));
+              setSelectedId(undefined);
+            }}
+            onCancel={() => router.back()}
+          />
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function DishPicker({
+  dishes,
+  mealId,
+  justLogged,
+  onSelect,
+  onCancel,
+}: {
+  dishes: readonly DishListItem[];
+  mealId: string | null;
+  justLogged: string | null;
+  onSelect: (id: string) => void;
+  onCancel: () => void;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  const [search, setSearch] = useState('');
+
+  const visible = useMemo(
+    () => filterDishes(dishes, { role: ALL_ROLES, search }),
+    [dishes, search],
+  );
+
+  return (
+    <View style={styles.body}>
+      <Text style={styles.title}>
+        {mealId === null ? 'What did you cook?' : 'And what else?'}
+      </Text>
+      {justLogged === null ? null : <Text style={styles.confirmation}>{justLogged}</Text>}
+
+      <SearchField value={search} onChangeText={setSearch} />
+
+      {/* Not a FlatList: this is inside the sheet's ScrollView, and nesting two vertical
+          scrollers breaks both. The repertoire is sixty rows, so rendering them all is
+          cheaper than the machinery that would avoid it. */}
+      <View>
+        {visible.map((item) => (
+          <DishListRow key={item.id} dish={item} onPress={() => onSelect(item.id)} />
+        ))}
+      </View>
+
+      {visible.length === 0 ? (
+        <Text style={styles.empty}>
+          Nothing matches that. Search by name, regional name, or an ingredient.
+        </Text>
+      ) : null}
+
+      <GhostButton label={mealId === null ? 'Cancel' : 'Done'} onPress={onCancel} />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+const SLOT_OPTIONS: readonly { value: Slot; label: string }[] = [
+  { value: 'breakfast', label: 'Breakfast' },
+  { value: 'lunch', label: 'Lunch' },
+  { value: 'dinner', label: 'Dinner' },
+  { value: 'snack', label: 'Snack' },
+];
+
+/** 3-point, never 5 stars (SPEC §7). Only a 1 moves the score. */
+const RATING_OPTIONS: readonly { value: Rating; label: string }[] = [
+  { value: 1, label: 'Not again' },
+  { value: 2, label: 'Fine' },
+  { value: 3, label: 'Make again' },
+];
+
+interface FormInput {
+  slot: Slot;
+  rating: Rating | null;
+  tweakNote: string | null;
+  isBatch: boolean;
+}
+
+function CookForm({
+  dish,
+  defaultSlot,
+  inMeal,
+  onSubmit,
+  onCancel,
+}: {
+  dish: DishListItem;
+  defaultSlot: Slot;
+  inMeal: boolean;
+  onSubmit: (input: FormInput, addAnother: boolean) => void;
+  onCancel: () => void;
+}) {
+  const styles = useThemedStyles(makeStyles);
+
+  // Nudged to a slot the dish is actually valid for when the default is not one of them —
+  // reaching a lunch-only dish from the detail screen in the evening should not quietly
+  // record it as dinner. Still fully overridable; this only picks the opening value.
+  const [slot, setSlot] = useState<Slot>(() =>
+    dish.slots.length === 0 || dish.slots.includes(defaultSlot)
+      ? defaultSlot
+      : dish.slots[0],
+  );
+  const [rating, setRating] = useState<Rating | null>(null);
+  const [tweakNote, setTweakNote] = useState('');
+  const [isBatch, setIsBatch] = useState(false);
+
+  const input: FormInput = { slot, rating, tweakNote, isBatch };
+
+  return (
+    <View style={styles.body}>
+      <Text style={styles.title}>{dish.name}</Text>
+      <Text style={styles.subtitle}>
+        {[dish.roleLabel, dish.primaryIngredient].filter(Boolean).join(' · ')}
+      </Text>
+
+      <SegmentedField
+        label="Meal"
+        options={SLOT_OPTIONS}
+        value={slot}
+        onChange={(next) => setSlot(next ?? slot)}
+      />
+
+      <SegmentedField
+        label="How did it turn out"
+        options={RATING_OPTIONS}
+        value={rating}
+        onChange={setRating}
+        // Clearable, so a mis-tap can be undone back to "didn't say".
+        clearable
+      />
+
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>For next time</Text>
+        {/* The sequence of these is what becomes the real recipe, so it is per cook event
+            and never folded into the dish. No dictation button: `expo-speech` is
+            text-to-speech, and the OS keyboard's mic is already there (SPEC §12). */}
+        <TextInput
+          value={tweakNote}
+          onChangeText={setTweakNote}
+          placeholder="Less tamarind, 4 whistles not 3"
+          style={styles.input}
+          multiline
+          numberOfLines={2}
+          textAlignVertical="top"
+          accessibilityLabel="Note for next time"
+        />
+      </View>
+
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Batch</Text>
+        <PillToggle
+          label="Cooked a big batch"
+          selected={isBatch}
+          onPress={() => setIsBatch(!isBatch)}
+        />
+        <Text style={styles.hint}>
+          Stops the app pushing another {dish.roleLabel.toLowerCase()} for two days.
+        </Text>
+      </View>
+
+      <View style={styles.actions}>
+        <PrimaryButton label="Log it" onPress={() => onSubmit(input, false)} />
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => onSubmit(input, true)}
+          style={({ pressed }) => [styles.linkButton, pressed && styles.linkPressed]}
+        >
+          <Text style={styles.linkLabel}>
+            {inMeal
+              ? 'Log it and add another'
+              : 'Log it and add another dish to this meal'}
+          </Text>
+        </Pressable>
+        <GhostButton label="Cancel" onPress={onCancel} />
+      </View>
+    </View>
+  );
+}
+
+const makeStyles = ({ colors, text }: Theme) => ({
+  sheet: {
+    flex: 1,
+    backgroundColor: colors.steel2,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
+  },
+  grab: {
+    width: 34,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.line,
+    alignSelf: 'center' as const,
+    marginTop: 8,
+    marginBottom: space.lg,
+  },
+  scroll: {
+    paddingHorizontal: layout.screenPaddingH,
+    paddingBottom: space.xxl,
+  },
+  body: {
+    gap: space.xl,
+  },
+  title: {
+    ...text.title,
+    fontSize: 18,
+    lineHeight: 22,
+  },
+  subtitle: {
+    ...text.meta,
+    // Pulled up under the title, which the container gap would otherwise separate.
+    marginTop: -space.xl + 3,
+  },
+  confirmation: {
+    ...text.bodySmall,
+    marginTop: -space.xl + space.sm,
+    color: colors.curryInk,
+  },
+  field: {
+    gap: 7,
+  },
+  fieldLabel: {
+    ...text.eyebrow,
+  },
+  input: {
+    ...text.body,
+    minHeight: 68,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    borderWidth: border.thin,
+    borderColor: colors.lineSoft,
+    borderRadius: radius.control,
+    backgroundColor: colors.steel1,
+    color: colors.ink,
+  },
+  hint: {
+    ...text.bodySmall,
+    fontSize: 11.5,
+    color: colors.ink3,
+  },
+  empty: {
+    ...text.bodySmall,
+    textAlign: 'center' as const,
+  },
+  actions: {
+    gap: space.md,
+  },
+  linkButton: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    minHeight: layout.minTouchTarget,
+  },
+  linkPressed: {
+    opacity: 0.6,
+  },
+  linkLabel: {
+    ...text.control,
+    textDecorationLine: 'underline' as const,
+  },
+});

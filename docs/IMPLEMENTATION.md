@@ -148,7 +148,7 @@ vantillu/
 │   │   └── insights.tsx          # Phase 11 — no tab until it exists
 │   ├── dish/[id].tsx             # detail: pattern stats, then recipe + timeline in Ph 7
 │   ├── dish/edit/[id].tsx        # add/edit dish + recipe
-│   ├── log/[dishId].tsx          # log modal
+│   ├── log.tsx                   # log sheet — one route, ?dishId skips the picker
 │   ├── debug.tsx                 # dev tools — dies with Phase 9
 │   └── onboarding.tsx
 ├── src/
@@ -165,6 +165,7 @@ vantillu/
 │   │   ├── rows.ts               # row shapes + TEXT → core union narrowing. No `db`.
 │   │   ├── todayModel.ts         # rows + `now` → Candidate/Context. No `db`, no clock.
 │   │   ├── dishesModel.ts        # rows + `now` → the repertoire list. No `db`, no clock.
+│   │   ├── cookModel.ts          # log sheet + `now` → a cook_event row. No `db`, no clock.
 │   │   ├── settings.ts           # how setting values are read. No `db`.
 │   │   └── seed.ts
 │   ├── components/
@@ -467,6 +468,28 @@ dish list to the real Dishes tab and kept only the prep writer Phase 9 will repl
 The log sheet: dish picker, slot, 3-point rating, tweak note, batch toggle,
 "add another dish to this meal" writing a shared `mealId`.
 **Done when:** logging a cook updates that dish's gauge on the Today screen immediately.
+
+**Hard rule 6 needed a reading, and `docs/SPEC.md` §16.1 now records it.** "One tap from
+Today" is about the *entry*: a suggestion card or a dish's **Log a cook** opens the sheet
+straight on the form, and the dish picker appears only for the FAB, which is the one caller
+that does not know the dish. Nothing may ever be inserted before that form on a path where
+the dish is already known.
+
+**One route, `app/log.tsx`, not the `log/[dishId].tsx` sketched in §3.** "Add another dish to
+this meal" has to carry a `mealId` across a return to the picker, and threading that through
+route params to a second screen puts the meal grouping in the navigator instead of in one
+component. `?dishId=` skips the picker; `?slot=` carries the slot being *browsed*, which is
+not the clock while Today's override is in force.
+
+Presented with `presentation: 'formSheet'` — a native bottom sheet on both platforms in
+react-native-screens 4, so Today stays visible behind it. **This is the part most worth
+looking at on device**; the detents are a guess.
+
+The acceptance criterion needs no invalidation code. `useLiveQuery` re-runs on any write to
+`cook_event`, and every derived value is computed on read (hard rule 2), so the gauge simply
+moves. What *is* tested in Node is the write/read round trip — `toCookEventRow` output fed
+back through both screen models — because `NewCookEventRow` is a structural superset of
+`CookEventRow`, so a wrong `cookedAt` format would compile and silently never parse.
 
 ### Phase 7 — recipes and notes
 Recipe view and editor (free text ingredients + method), dish notes, and the cook-note
