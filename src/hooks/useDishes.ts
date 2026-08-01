@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useMemo } from 'react';
+import { buildCookTimeline, type CookTimelineEntry } from '../db/cookModel';
 import {
   buildDishList,
   type DishListItem,
@@ -7,7 +8,12 @@ import {
   usedRoles,
 } from '../db/dishesModel';
 import { roleConfigQuery } from '../db/queries/roles';
-import { cookEventsQuery, dishesQuery, dishSlotsQuery } from '../db/queries/tables';
+import {
+  cookEventsForDishQuery,
+  cookEventsQuery,
+  dishesQuery,
+  dishSlotsQuery,
+} from '../db/queries/tables';
 import type { RoleConfigRow } from '../db/roles';
 import { useNow } from './useNow';
 
@@ -68,6 +74,8 @@ export function useDishes(): DishesScreenModel {
 export interface DishDetailModel {
   now: Date;
   dish: DishListItem | undefined;
+  /** Newest cook first. Every cook, not only the annotated ones. */
+  timeline: CookTimelineEntry[];
   isReady: boolean;
   error: Error | undefined;
 }
@@ -83,13 +91,21 @@ export interface DishDetailModel {
 export function useDish(id: string | undefined): DishDetailModel {
   const { now, dishes, isReady, error } = useDishes();
 
+  // Deps carry the id, or this stays pinned to whichever dish was opened first. The empty
+  // string is never a real UUID, so the query is harmless while the param resolves.
+  const events = useLiveQuery(cookEventsForDishQuery(id ?? ''), [id]);
+
   return {
     now,
     dish: useMemo(
       () => (id === undefined ? undefined : dishes.find((d) => d.id === id)),
       [dishes, id],
     ),
+    timeline: useMemo(
+      () => buildCookTimeline(events.data ?? [], now),
+      [events.data, now],
+    ),
     isReady,
-    error,
+    error: error ?? events.error,
   };
 }

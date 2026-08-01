@@ -197,7 +197,7 @@ Base is the staleness ratio. Then:
 | **+0.8** | `dish.season` equals the current season |
 | **−4.0** | `primaryIngredient` cooked in the last 2 days |
 | **−2.0** | this role was filled by a batch cook in the last 48 h |
-| **−1.5** | most recent rating was 1 (*not again*) |
+| **−1.5** | most recent rating was 1 (*not again*) — **dormant, see §7.1** |
 
 Definitions that were previously unstated:
 
@@ -381,6 +381,30 @@ dishes.
 The three kinds of note stay separate; see the table in `CLAUDE.md`. `tweakNote` is
 per-cook-event and the chronological sequence of tweaks is what becomes the real recipe.
 Never fold them into the dish record.
+
+### 7.1 Nothing captures a rating — dropped from the log sheet in Phase 6
+
+**The log sheet no longer asks "how did it turn out".** Cut on the author's judgement after
+using it: it is one more decision on the path the app is supposed to make frictionless, and
+the note field says anything a rating could, in the user's own words.
+
+Consequences, stated plainly so this stays a decision rather than a mystery:
+
+- `cook_event.rating` **stays** in the schema, nullable, and every new row writes `NULL`.
+  Removing the column would need a migration and would make old exports lossy for nothing.
+- The **−1.5 "last rated 1" weight in §4.3 is now dormant.** It is still implemented and
+  still tested, and it fires the moment anything writes a rating again. Nothing does today,
+  so in practice the score is the staleness ratio plus the four bonuses and two other
+  penalties.
+- `lastRating` is therefore always null in practice. The rule that a later *unrated* cook
+  must not erase an earlier rating (§4.3) is kept, because it costs nothing and is what
+  makes re-introducing ratings safe.
+- The cook timeline still **renders** a rating when a row has one, so imported or
+  hand-written history displays correctly.
+
+If ratings come back, the natural home is the timeline in §16.5 — rating a cook you are
+looking at, rather than one you are in the middle of logging. That is a product decision, not
+a task.
 
 ---
 
@@ -770,21 +794,17 @@ data that eventually becomes the recipe (§7).
 |---|---|---|
 | Dish | from the caller, or picked | yes |
 | Meal slot | the slot being *browsed*, else the clock | yes |
-| Rating | **nothing selected** | no |
 | Note for next time | empty | no |
 | Batch | off | no |
+
+There is **no rating field** — dropped in Phase 6 after using the sheet; see §7.1 for what
+that costs.
 
 **The slot defaults to what the user was looking at, not to the clock.** Those differ
 whenever Today's manual override is in force (§2.2), and tapping a lunch suggestion at 8pm
 means lunch. Where there is no slot context — the detail screen — it falls back to the clock,
 and then to a slot the dish is actually valid for, so a lunch-only dish reached in the
 evening does not silently record as dinner.
-
-**A rating is not pre-selected.** The mockup shows "Fine" pressed; that would record an
-opinion nobody gave. `cook_event.rating` is nullable precisely so "didn't say" is
-expressible, only a 1 moves the score anyway (§7), and the "a later unrated cook does not
-erase an earlier *not again*" rule in §4.3 is meaningless unless unrated cooks exist.
-Pressing the selected rating again clears it.
 
 The note is a plain multiline input. **No dictation button** — §12 stands, and the OS
 keyboard's mic is already there.
@@ -810,4 +830,20 @@ unanswerable later.
 - **It does not capture a photo.** `cook_event.photo_uri` stays null. `expo-image-picker` is
   a native module (§13), so adding it means rebuilding the dev client, and the column is
   ready whenever that happens.
-- **It writes no rating by default**, per §16.2.
+- **It writes no rating at all**, per §7.1.
+
+### 16.5 Where the note comes back out
+
+A note typed into the sheet appears in **From past cooks** on that dish's detail screen —
+the rail of past cooks, newest first, with the note as the emphasised line and the date as
+the quiet one. The chronological sequence of those notes is what becomes the real recipe,
+which is the whole reason they live on the cook event.
+
+This was **pulled forward from Phase 7**. Phase 6 shipped note capture with nothing that
+displayed it, and text that vanishes on save reads as a bug however the roadmap is written.
+The recipe view and the dish's own `notes` field are still Phase 7.
+
+**Every cook appears, not only the annotated ones.** The timeline is the history; the notes
+are the interesting part of it. Filtering to annotated cooks would make the gaps look like
+months of not cooking something. An unannotated cook reads "no note", and the year is
+dropped from the date until it stops being obvious.

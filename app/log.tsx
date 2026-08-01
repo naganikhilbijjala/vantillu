@@ -16,7 +16,7 @@ import { PrimaryButton } from '../src/components/PrimaryButton';
 import { SearchField } from '../src/components/SearchField';
 import { SegmentedField } from '../src/components/SegmentedField';
 import { slotForDate } from '../src/core/slots';
-import type { Rating, Slot } from '../src/core/types';
+import type { Slot } from '../src/core/types';
 import { confirmationFor } from '../src/db/cookModel';
 import { ALL_ROLES, type DishListItem, filterDishes } from '../src/db/dishesModel';
 import { logCook, newMealId } from '../src/db/queries/cook';
@@ -39,9 +39,10 @@ import { useThemedStyles } from '../src/theme/useTheme';
  * appears when the caller genuinely does not know the dish yet, which is the FAB. Nothing
  * may ever be inserted before that form.
  *
- * Everything on the form is optional except the dish. A rating is not pre-selected: an
- * unrated cook is a real thing to record, and defaulting to "Fine" would put an opinion
- * nobody gave into the history (SPEC §7).
+ * Everything on the form is optional except the dish. **There is no rating field** — it was
+ * dropped after using the sheet, because it is one more decision on the path the app exists
+ * to make frictionless, and the note says anything a rating could in the user's own words.
+ * `cook_event.rating` stays nullable and unwritten; SPEC §7.1 records what that costs.
  */
 export default function LogCook() {
   const styles = useThemedStyles(makeStyles);
@@ -97,7 +98,9 @@ export default function LogCook() {
             inMeal={mealId !== null}
             onSubmit={(input, addAnother) => {
               const meal = addAnother ? (mealId ?? newMealId()) : mealId;
-              logCook({ ...input, dishId: dish.id, mealId: meal });
+              // The sheet does not ask how it turned out, so nothing is recorded. The
+              // column and the −1.5 weight stay, dormant, per SPEC §7.1.
+              logCook({ ...input, rating: null, dishId: dish.id, mealId: meal });
 
               if (!addAnother) {
                 router.back();
@@ -177,16 +180,8 @@ const SLOT_OPTIONS: readonly { value: Slot; label: string }[] = [
   { value: 'snack', label: 'Snack' },
 ];
 
-/** 3-point, never 5 stars (SPEC §7). Only a 1 moves the score. */
-const RATING_OPTIONS: readonly { value: Rating; label: string }[] = [
-  { value: 1, label: 'Not again' },
-  { value: 2, label: 'Fine' },
-  { value: 3, label: 'Make again' },
-];
-
 interface FormInput {
   slot: Slot;
-  rating: Rating | null;
   tweakNote: string | null;
   isBatch: boolean;
 }
@@ -214,11 +209,10 @@ function CookForm({
       ? defaultSlot
       : dish.slots[0],
   );
-  const [rating, setRating] = useState<Rating | null>(null);
   const [tweakNote, setTweakNote] = useState('');
   const [isBatch, setIsBatch] = useState(false);
 
-  const input: FormInput = { slot, rating, tweakNote, isBatch };
+  const input: FormInput = { slot, tweakNote, isBatch };
 
   return (
     <View style={styles.body}>
@@ -231,16 +225,7 @@ function CookForm({
         label="Meal"
         options={SLOT_OPTIONS}
         value={slot}
-        onChange={(next) => setSlot(next ?? slot)}
-      />
-
-      <SegmentedField
-        label="How did it turn out"
-        options={RATING_OPTIONS}
-        value={rating}
-        onChange={setRating}
-        // Clearable, so a mis-tap can be undone back to "didn't say".
-        clearable
+        onChange={setSlot}
       />
 
       <View style={styles.field}>

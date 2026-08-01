@@ -2,9 +2,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackLink } from '../../src/components/BackLink';
+import { CookTimeline } from '../../src/components/CookTimeline';
 import { IntervalGauge } from '../../src/components/IntervalGauge';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
 import { StatGrid, StatTile } from '../../src/components/StatTile';
+import type { CookTimelineEntry } from '../../src/db/cookModel';
 import { type DishListItem, patternSummary } from '../../src/db/dishesModel';
 import { useDish } from '../../src/hooks/useDishes';
 import { layout, space, type Theme } from '../../src/theme/tokens';
@@ -25,7 +27,7 @@ export default function DishDetail() {
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { dish, isReady, error } = useDish(id);
+  const { dish, timeline, isReady, error } = useDish(id);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -48,14 +50,20 @@ export default function DishDetail() {
             </View>
           ) : null
         ) : (
-          <Body dish={dish} />
+          <Body dish={dish} timeline={timeline} />
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function Body({ dish }: { dish: DishListItem }) {
+function Body({
+  dish,
+  timeline,
+}: {
+  dish: DishListItem;
+  timeline: readonly CookTimelineEntry[];
+}) {
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
 
@@ -113,6 +121,12 @@ function Body({ dish }: { dish: DishListItem }) {
       </StatGrid>
 
       <Text style={styles.slots}>{slots}</Text>
+
+      {/* Pulled forward from Phase 7: Phase 6 captures a note per cook, and text that
+          vanishes on save reads as a bug however the roadmap is written. The recipe view
+          and the dish's own notes are still Phase 7. */}
+      <Text style={styles.heading}>From past cooks</Text>
+      <CookTimeline entries={timeline} />
 
       {/* Also the one-tap path: the dish is known, so the sheet skips the picker. */}
       <View style={styles.action}>

@@ -3,13 +3,11 @@ import { border, layout, radius, space, type Theme } from '../theme/tokens';
 import { useThemedStyles } from '../theme/useTheme';
 
 /**
- * A labelled row of mutually exclusive choices — the log sheet's meal slot and its
- * 3-point rating.
+ * A labelled row of mutually exclusive choices. One caller: the log sheet's meal slot.
  *
- * `value` may be null, and that is the point for the rating: an unrated cook is a real
- * state, so nothing is pre-selected and pressing the selected option again clears it
- * (`docs/SPEC.md` §7). A control that cannot express "didn't say" would force an opinion
- * into every row.
+ * `value` is deliberately non-nullable. An earlier version allowed null and a `clearable`
+ * flag, for a rating field that no longer exists — the slot is always set, so the extra
+ * state was generality nobody was asking for.
  */
 
 export interface SegmentedOption<T> {
@@ -20,10 +18,8 @@ export interface SegmentedOption<T> {
 export interface SegmentedFieldProps<T> {
   label: string;
   options: readonly SegmentedOption<T>[];
-  value: T | null;
-  onChange: (value: T | null) => void;
-  /** When false, tapping the selected option does nothing instead of clearing it. */
-  clearable?: boolean;
+  value: T;
+  onChange: (value: T) => void;
 }
 
 export function SegmentedField<T extends string | number>({
@@ -31,7 +27,6 @@ export function SegmentedField<T extends string | number>({
   options,
   value,
   onChange,
-  clearable = false,
 }: SegmentedFieldProps<T>) {
   const styles = useThemedStyles(makeStyles);
 
@@ -46,7 +41,7 @@ export function SegmentedField<T extends string | number>({
               key={String(option.value)}
               accessibilityRole="radio"
               accessibilityState={{ selected }}
-              onPress={() => onChange(selected && clearable ? null : option.value)}
+              onPress={() => onChange(option.value)}
               style={({ pressed }) => [
                 styles.segment,
                 selected && styles.segmentSelected,

@@ -1,4 +1,4 @@
-import { desc, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '../client';
 import { cookEvent, dish, dishSlot, prepState } from '../schema';
 
@@ -68,6 +68,31 @@ export function cookEventsQuery() {
     })
     .from(cookEvent)
     .where(isNull(cookEvent.deletedAt))
+    .orderBy(desc(cookEvent.cookedAt));
+}
+
+/**
+ * One dish's cook log, with the notes, newest first — the detail screen's timeline.
+ *
+ * Scoped to a dish and selecting two more columns than `cookEventsQuery`, rather than
+ * widening that one: `tweak_note` is free text of unbounded length, and Today and the
+ * dishes list would then carry every note ever written just to compute a median.
+ *
+ * Pass `[dishId]` as the `useLiveQuery` deps so it resubscribes when the screen changes
+ * dish — the default `[]` would pin it to whichever dish was open first.
+ */
+export function cookEventsForDishQuery(dishId: string) {
+  return db
+    .select({
+      id: cookEvent.id,
+      cookedAt: cookEvent.cookedAt,
+      rating: cookEvent.rating,
+      tweakNote: cookEvent.tweakNote,
+      isBatch: cookEvent.isBatch,
+      isEstimated: cookEvent.isEstimated,
+    })
+    .from(cookEvent)
+    .where(and(eq(cookEvent.dishId, dishId), isNull(cookEvent.deletedAt)))
     .orderBy(desc(cookEvent.cookedAt));
 }
 

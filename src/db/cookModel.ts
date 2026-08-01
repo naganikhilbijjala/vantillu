@@ -1,5 +1,7 @@
+import { format, isSameYear } from 'date-fns';
 import type { Rating, Slot } from '../core/types';
-import { toLocalIso } from './time';
+import { asRating } from './rows';
+import { parseLocalIso, toLocalIso } from './time';
 
 /**
  * Turning a filled-in log sheet into a `cook_event` row.
@@ -101,4 +103,77 @@ export function confirmationFor(dishName: string, medianInterval: number | null)
   }
   const days = medianInterval === 1 ? '1 day' : `${medianInterval} days`;
   return `${dishName} logged. Usually about ${days} between these.`;
+}
+
+// ---------------------------------------------------------------------------
+// The cook-note timeline
+// ---------------------------------------------------------------------------
+
+/**
+ * One past cook, as the detail screen shows it.
+ *
+ * Pulled forward from Phase 7 because Phase 6 started capturing `tweakNote` with nowhere to
+ * read it back — text that vanishes on save reads as a bug whatever the roadmap says. The
+ * recipe view and the dish notes are still Phase 7.
+ */
+export interface CookTimelineEntry {
+  id: string;
+  cookedAt: Date;
+  /** "1 Jul", or "1 Jul 2025" once the year stops being obvious. */
+  dateLabel: string;
+  rating: Rating | null;
+  /** SPEC §7's wording, or null when the cook was never rated. */
+  ratingLabel: string | null;
+  tweakNote: string | null;
+  isBatch: boolean;
+  /** An onboarding guess, so the date is approximate and says so (SPEC §3). */
+  isEstimated: boolean;
+}
+
+export interface CookEventDetailRow {
+  id: string;
+  cookedAt: string;
+  rating: number | null;
+  tweakNote: string | null;
+  isBatch: boolean;
+  isEstimated: boolean;
+}
+
+/** 3-point, never 5 stars (SPEC §7). */
+const RATING_LABEL: Record<Rating, string> = {
+  1: 'not again',
+  2: 'fine',
+  3: 'make again',
+};
+
+/**
+ * Newest first, and it sorts its own input rather than trusting the caller's ORDER BY —
+ * the same rule `summariseHistory` and `groupEvents` follow.
+ *
+ * **Every cook appears, not only the ones with a note.** The timeline is the history; the
+ * notes are the interesting part of it. Showing only annotated cooks would make the gaps
+ * look like months of not cooking something.
+ */
+export function buildCookTimeline(
+  rows: readonly CookEventDetailRow[],
+  now: Date,
+): CookTimelineEntry[] {
+  return rows
+    .map((row) => {
+      const cookedAt = parseLocalIso(row.cookedAt);
+      const rating = asRating(row.rating);
+      return {
+        id: row.id,
+        cookedAt,
+        // The year is noise until it is ambiguous, which is what makes a long history
+        // readable — twelve "3 Jul" rows tell you nothing about which year.
+        dateLabel: format(cookedAt, isSameYear(cookedAt, now) ? 'd MMM' : 'd MMM yyyy'),
+        rating,
+        ratingLabel: rating === null ? null : RATING_LABEL[rating],
+        tweakNote: trimToNull(row.tweakNote),
+        isBatch: row.isBatch,
+        isEstimated: row.isEstimated,
+      };
+    })
+    .sort((a, b) => b.cookedAt.getTime() - a.cookedAt.getTime());
 }
