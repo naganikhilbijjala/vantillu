@@ -145,22 +145,26 @@ vantillu/
 │   │   ├── _layout.tsx           # bottom tab bar
 │   │   ├── index.tsx             # Today
 │   │   ├── dishes.tsx            # repertoire list
-│   │   └── insights.tsx
-│   ├── dish/[id].tsx             # detail: recipe + note timeline
+│   │   └── insights.tsx          # Phase 11 — no tab until it exists
+│   ├── dish/[id].tsx             # detail: pattern stats, then recipe + timeline in Ph 7
 │   ├── dish/edit/[id].tsx        # add/edit dish + recipe
 │   ├── log/[dishId].tsx          # log modal
+│   ├── debug.tsx                 # dev tools — dies with Phase 9
 │   └── onboarding.tsx
 ├── src/
 │   ├── core/                     # PURE TS — no react, no react-native imports
 │   │   ├── interval.ts           # median interval, staleness ratio
 │   │   ├── scoring.ts            # eligibility, score, reasons
 │   │   ├── slots.ts              # hour → meal slot, time budgets
+│   │   ├── prep.ts               # prep shelf life
 │   │   └── types.ts
 │   ├── db/
 │   │   ├── schema.ts
 │   │   ├── client.ts
-│   │   ├── queries/              # one module per screen's data needs — these import `db`
+│   │   ├── queries/              # these import `db` — tables.ts is one read per table
+│   │   ├── rows.ts               # row shapes + TEXT → core union narrowing. No `db`.
 │   │   ├── todayModel.ts         # rows + `now` → Candidate/Context. No `db`, no clock.
+│   │   ├── dishesModel.ts        # rows + `now` → the repertoire list. No `db`, no clock.
 │   │   ├── settings.ts           # how setting values are read. No `db`.
 │   │   └── seed.ts
 │   ├── components/
@@ -169,7 +173,7 @@ vantillu/
 ├── drizzle/                      # generated migrations — commit these
 ├── assets/
 │   └── seed_dishes.json
-├── __tests__/                    # vitest — src/core, plus the two pure src/db modules
+├── __tests__/                    # vitest — src/core, plus the pure src/db models
 ├── CLAUDE.md                     # conventions — loaded every session
 └── docs/
     ├── SPEC.md                   # product decisions — authoritative
@@ -435,6 +439,29 @@ otherwise be unverifiable code.
 ### Phase 5 — Dishes list and detail
 Staleness-sorted list, role filters, search, detail screen with pattern stats.
 **Done when:** you can navigate list → detail → back with state preserved.
+
+The tab bar landed here, since this is the first phase with a second place to go. **Two
+tabs, not the mockup's three** — Insights is Phase 11 and cuttable, and a tab that opens
+nothing is worse than a tab that isn't there yet.
+
+State preservation is structural rather than something to remember: the role filter and the
+search live in the `dishes.tsx` component, and the detail screen is *pushed over* the tab
+group rather than swapped into it, so the list stays mounted with its scroll position. Put
+that state in `useDishes` and it would reset on every back.
+
+`src/db/rows.ts` came out of `todayModel.ts` when the second screen arrived: row shapes plus
+the TEXT-to-union narrowing, shared. Each `as*` function encodes a decision about what a bad
+value *means*, and two copies of those decisions would eventually disagree. Same reason
+`queries/today.ts` became `queries/tables.ts` — those reads are per table, not per screen,
+and the dishes list wants four of the same six.
+
+`src/db/dishesModel.ts` is a sibling of `todayModel.ts`, not a slice of it. Today drops
+everything ineligible; the repertoire keeps a podi, because it is a dish you own — it is
+simply never *suggested* (`docs/SPEC.md` §1.1). See SPEC §15 for the sort, which is three
+bands rather than one ratio.
+
+Phase 3's `app/scratch.tsx` is gone, as its own comment promised. `app/debug.tsx` lost its
+dish list to the real Dishes tab and kept only the prep writer Phase 9 will replace.
 
 ### Phase 6 — logging
 The log sheet: dish picker, slot, 3-point rating, tweak note, batch toggle,

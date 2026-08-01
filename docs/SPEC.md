@@ -670,3 +670,74 @@ renders.
 
 A hard-coded hex outside `tokens.ts` will look correct in whichever scheme it was written
 for and wrong in the other. There is no third place for colour.
+
+---
+
+## 15. The repertoire list
+
+Added in Phase 5. Today answers *what should I cook now*; this screen answers *what do I
+cook*. The difference decides everything below.
+
+### 15.1 What appears
+
+Every dish that is not archived and not soft-deleted — **including the always-available
+roles**. A podi is a dish you own. §1.1 excludes it from *suggestions*, from staleness, and
+from scoring; it does not exclude it from your repertoire, and leaving it out of the one
+screen that lists everything would read as data loss.
+
+Archived dishes are excluded, per §4.1's "invisible by design". There is no archive UI to
+reach them from yet; when there is, it belongs here behind a toggle rather than as a
+fourth band in the sort.
+
+### 15.2 Sorted by staleness, in three bands
+
+Not one ratio. Three bands, in this order, because they answer different questions:
+
+| Band | Contents | Sorted by |
+|---|---|---|
+| 1 | Dishes with a known rhythm | ratio descending — most overdue first |
+| 2 | Dishes with no rhythm yet (under 3 cooks, or a median of 0) | name |
+| 3 | Always-available dishes | name |
+
+Band 2 exists because an unknown rhythm scores a **neutral 1.0** (§3), which is numerically
+"exactly due" and would outrank a genuinely fresh dish at 1/7. Ranking band 2 among band 1
+would be inventing a number, which is the one thing the interval maths refuses to do
+everywhere else. Band 3 exists because a podi is never overdue — it is in the cupboard.
+
+Ties break by **name**, and that is not a detail: before onboarding writes any history every
+dish is in band 2, so the name order is the entire order a fresh install shows.
+
+An always-available dish shows **no gauge and no day count** in its row, and no gauge on its
+detail screen. Drawing an empty bar beside it would imply a rhythm it does not have.
+
+### 15.3 Filters and search
+
+- **Role filters** come from `role_config`, in `sort_order`, and **only for roles some
+  surviving dish actually uses** — a filter that returns nothing is a dead end. Labels come
+  from the config, never from the raw role string, so a renamed role shows its new name.
+  Tapping the active filter clears it.
+- **Search** matches `name`, `alt_name`, and `primary_ingredient`, case-insensitive
+  substring. The ingredient is deliberate: "brinjal" is how you look for gutti vankaya when
+  you have brinjals to use up. `notes` and the recipe text are deliberately **not** searched
+  — they are long, and matching inside them surfaces a row that cannot show why it matched.
+- No fuzzy matching. A repertoire is sixty dishes and a substring is predictable.
+
+### 15.4 The detail screen
+
+Eyebrow of role · effort · prep label, the name, the regional name, the gauge, then one line
+of plain verdict and four stat tiles: cooked N times, last made N days ago, usually every
+N days, takes N minutes.
+
+The verdict line never claims what it cannot back up. With no median it reads *No pattern
+yet* — or *Never cooked yet* at zero cooks — rather than a due date. A stat with no honest
+value is an **em dash, never a zero**: "—" and "every 0 days" are different claims.
+
+**Recipe and the cook-note timeline are Phase 7**, and are absent rather than stubbed until
+then. An empty "Recipe" heading reads as a broken screen, and a dish with no recipe is
+supposed to look like a normal dish (§12, and the empty-state rule in `CLAUDE.md`).
+
+### 15.5 Navigation
+
+The detail screen is **pushed over** the tab group, not swapped into it, so the list keeps
+its scroll position, its role filter, and its search on the way back. That is why the filter
+and search are screen state rather than part of the data hook.

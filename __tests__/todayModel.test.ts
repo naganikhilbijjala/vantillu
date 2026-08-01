@@ -1,15 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { RoleConfigRow } from '../src/db/roles';
+import type { CookEventRow, DishRow, DishSlotRow, PrepStateRow } from '../src/db/rows';
 import { SETTING_KEYS, toSettingMap } from '../src/db/settings';
 import { toLocalIso } from '../src/db/time';
-import {
-  buildTodayModel,
-  type CookEventRow,
-  type DishRow,
-  type DishSlotRow,
-  type PrepStateRow,
-  type TodayInputs,
-} from '../src/db/todayModel';
+import { buildTodayModel, type TodayInputs } from '../src/db/todayModel';
 import { day } from './fixtures';
 
 /**
@@ -26,6 +20,7 @@ function dishRow(overrides: Partial<DishRow> = {}): DishRow {
   return {
     id: 'dish-1',
     name: 'Muddha pappu',
+    altName: null,
     role: 'dal',
     primaryIngredient: 'toor dal',
     effort: 'quick',

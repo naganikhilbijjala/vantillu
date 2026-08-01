@@ -22,6 +22,7 @@ export function dishesQuery() {
     .select({
       id: dish.id,
       name: dish.name,
+      altName: dish.altName,
       role: dish.role,
       primaryIngredient: dish.primaryIngredient,
       effort: dish.effort,

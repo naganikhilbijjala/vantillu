@@ -14,7 +14,7 @@ import {
   dishesQuery,
   dishSlotsQuery,
   prepStatesQuery,
-} from '../db/queries/today';
+} from '../db/queries/tables';
 import { toSettingMap } from '../db/settings';
 import { buildTodayModel, type DishDisplay, type LivePrep } from '../db/todayModel';
 import { useNow } from './useNow';

@@ -1,20 +1,19 @@
 import { format } from 'date-fns';
-import { Link } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DishCard } from '../src/components/DishCard';
-import { FAB_SIZE, Fab } from '../src/components/Fab';
-import { GhostButton } from '../src/components/GhostButton';
-import { HeldBackNote } from '../src/components/HeldBackNote';
-import { PillToggle } from '../src/components/PillToggle';
-import { PrepBanner } from '../src/components/PrepBanner';
-import { SlotSwitcher } from '../src/components/SlotSwitcher';
-import { DEFAULT_SUGGESTION_COUNT } from '../src/core/scoring';
-import type { Slot } from '../src/core/types';
-import { useToday } from '../src/hooks/useToday';
-import { border, layout, radius, space, type Theme } from '../src/theme/tokens';
-import { useThemedStyles } from '../src/theme/useTheme';
+import { DishCard } from '../../src/components/DishCard';
+import { FAB_SIZE, Fab } from '../../src/components/Fab';
+import { GhostButton } from '../../src/components/GhostButton';
+import { HeldBackNote } from '../../src/components/HeldBackNote';
+import { PillToggle } from '../../src/components/PillToggle';
+import { PrepBanner } from '../../src/components/PrepBanner';
+import { SlotSwitcher } from '../../src/components/SlotSwitcher';
+import { DEFAULT_SUGGESTION_COUNT } from '../../src/core/scoring';
+import type { Slot } from '../../src/core/types';
+import { useToday } from '../../src/hooks/useToday';
+import { border, layout, radius, space, type Theme } from '../../src/theme/tokens';
+import { useThemedStyles } from '../../src/theme/useTheme';
 
 /**
  * Today — the screen the whole app exists for: *what should I cook right now?*
@@ -80,8 +79,10 @@ export default function Today() {
   const shown = suggestions.slice(0, visibleCount);
   const remaining = suggestions.length - shown.length;
 
+  // Top edge only: the tab bar owns the bottom inset now, and claiming it here too would
+  // double-pad the FAB away from the bar it should sit just above.
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
           {/* The eyebrow states the real time of day; the title states the slot being
@@ -158,17 +159,6 @@ export default function Today() {
             <HeldBackNote groups={heldBack} slot={slot} isWeekend={isWeekend} />
           </View>
         )}
-
-        {/* Throwaway, like the two screens it points at. The bottom tab bar lands with the
-            Dishes list in Phase 5 and takes this row with it. */}
-        <View style={[styles.gutter, styles.devRow]}>
-          <Link href="/scratch" style={styles.devLink}>
-            components
-          </Link>
-          <Link href="/debug" style={styles.devLink}>
-            database
-          </Link>
-        </View>
       </ScrollView>
 
       {/* Phase 6 wires this to the log sheet. Present now because it is the screen's
@@ -238,13 +228,5 @@ const makeStyles = ({ colors, text }: Theme) => ({
   error: {
     ...text.bodySmall,
     color: colors.gongura,
-  },
-  devRow: {
-    flexDirection: 'row' as const,
-    gap: space.xl,
-    marginTop: space.xl,
-  },
-  devLink: {
-    ...text.meta,
   },
 });

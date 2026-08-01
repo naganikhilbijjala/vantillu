@@ -3,15 +3,18 @@ import seedFile from '../assets/seed_dishes.json';
 import { buildSuggestions } from '../src/core/scoring';
 import { localDateKey } from '../src/core/slots';
 import type { Slot } from '../src/core/types';
+import {
+  ALL_ROLES,
+  buildDishList,
+  filterDishes,
+  sortByStaleness,
+  usedRoles,
+} from '../src/db/dishesModel';
 import { DEFAULT_ROLES } from '../src/db/roles';
+import type { DishRow, DishSlotRow, PrepStateRow } from '../src/db/rows';
 import { toSettingMap } from '../src/db/settings';
 import { toLocalIso } from '../src/db/time';
-import {
-  buildTodayModel,
-  type DishRow,
-  type DishSlotRow,
-  type PrepStateRow,
-} from '../src/db/todayModel';
+import { buildTodayModel } from '../src/db/todayModel';
 import { day } from './fixtures';
 
 /**
@@ -34,6 +37,7 @@ const SEED_PREP: Record<string, { kind: string | null; label: string | null }> =
 
 interface SeedDish {
   name: string;
+  local_name: string | null;
   role: string;
   primary_ingredient: string | null;
   effort: string;
@@ -56,6 +60,7 @@ SEED.forEach((seed, index) => {
   dishes.push({
     id,
     name: seed.name,
+    altName: seed.local_name ?? null,
     role: seed.role,
     primaryIngredient: seed.primary_ingredient ?? null,
     effort: seed.effort,
@@ -189,5 +194,81 @@ describe('a live batter, against the real seed', () => {
     expect(idli?.reasons.map((r) => r.kind)).toContain('prep_ready');
     // Every suggestion states a reason, or it gets ignored (SPEC §4.6).
     expect(suggestions.every((s) => s.reasons.length > 0)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The other half of the same data: the repertoire list (Phase 5)
+// ---------------------------------------------------------------------------
+
+function repertoire(cookEvents: never[] = []) {
+  return sortByStaleness(buildDishList({ dishes, dishSlots, roles, cookEvents }, MONDAY));
+}
+
+describe('the repertoire list, against the real seed', () => {
+  it('shows every seeded dish, including the ones Today will never suggest', () => {
+    const items = repertoire();
+    expect(items).toHaveLength(SEED.length);
+
+    // A podi is a dish you own. It is excluded from *suggestions*, not from the list.
+    const always = new Set(ALWAYS_AVAILABLE_ROLES);
+    expect(items.filter((i) => always.has(i.role)).length).toBeGreaterThan(0);
+  });
+
+  it('sinks the always-available dishes to the bottom, in one block', () => {
+    const items = repertoire();
+    const always = new Set(ALWAYS_AVAILABLE_ROLES);
+    const firstAlways = items.findIndex((i) => always.has(i.role));
+    const lastNormal = items.findLastIndex((i) => !always.has(i.role));
+
+    expect(firstAlways).toBeGreaterThan(-1);
+    expect(firstAlways).toBeGreaterThan(lastNormal);
+  });
+
+  it('carries a role label for every dish, taken from role_config', () => {
+    const byRole = new Map(roles.map((r) => [r.role, r.label]));
+    for (const item of repertoire()) {
+      expect(item.roleLabel).toBe(byRole.get(item.role));
+      // Never the raw role string, which is what a missing config row would leave behind.
+      expect(item.roleLabel).not.toBe(item.role);
+    }
+  });
+
+  it('offers a role filter for every role, and each one returns something', () => {
+    const items = repertoire();
+    const offered = usedRoles(items, roles);
+
+    // The seed uses all eleven, so a missing one means the seed or the defaults moved.
+    expect(offered).toHaveLength(DEFAULT_ROLES.length);
+    for (const role of offered) {
+      const filtered = filterDishes(items, { role: role.role, search: '' });
+      expect(filtered.length).toBeGreaterThan(0);
+      expect(filtered.every((i) => i.role === role.role)).toBe(true);
+    }
+  });
+
+  it('finds a dish by its regional name and by its ingredient', () => {
+    const items = repertoire();
+    const find = (search: string) =>
+      filterDishes(items, { role: ALL_ROLES, search }).map((i) => i.name);
+
+    // Pesarattu is seeded with `local_name: "Pesarattu"` and the name "Pesarattu"; the
+    // interesting case is a dish whose alt name differs from its name.
+    expect(find('bangaladumpa')).toContain('Aloo fry');
+    expect(find('brinjal').length).toBeGreaterThan(1);
+    expect(find('zzzz')).toEqual([]);
+  });
+
+  it('reads as all-new before any history exists, in name order', () => {
+    // The state a fresh install is actually in: nothing cooked, so nothing has a rhythm
+    // and the name tiebreak is the entire order. Phase 8's estimates change this.
+    const items = repertoire();
+    const normal = items.filter((i) => !i.isAlwaysAvailable);
+
+    expect(normal.every((i) => i.stalenessState === 'new')).toBe(true);
+    expect(normal.every((i) => i.cookCount === 0 && i.daysSince === null)).toBe(true);
+
+    const names = normal.map((i) => i.name);
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
   });
 });

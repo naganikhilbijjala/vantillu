@@ -1,18 +1,22 @@
 import { differenceInCalendarDays } from 'date-fns';
-import type { CookHistoryEvent } from '../core/interval';
 import { summariseHistory } from '../core/interval';
 import { RICE_STAPLE_INGREDIENT, RICE_STAPLE_ROLE, WINDOWS } from '../core/scoring';
 import { isWeekendDate, seasonForDate } from '../core/slots';
-import type {
-  Candidate,
-  Context,
-  Effort,
-  PrepKind,
-  Rating,
-  Season,
-  Slot,
-} from '../core/types';
+import type { Candidate, Context, PrepKind, Slot } from '../core/types';
 import type { RoleConfigRow } from './roles';
+import {
+  asEffort,
+  asPrepKind,
+  asSeason,
+  type CookEventRow,
+  type DishRow,
+  type DishSlotRow,
+  groupEvents,
+  groupSlots,
+  hasRecipe,
+  NO_EVENTS,
+  type PrepStateRow,
+} from './rows';
 import { isVegOnlyDay, isVegOnlyToday, type SettingMap } from './settings';
 import { parseLocalIso } from './time';
 
@@ -22,56 +26,20 @@ import { parseLocalIso } from './time';
  * This is the boundary between SQLite and `src/core/`. It reads no clock — `now` is an
  * argument — and imports no `db`, so the whole Today pipeline can be run against plain
  * objects in Node. Everything time-dependent lives here rather than in the SQL, which is
- * what lets `queries/today.ts` subscribe to each table exactly once instead of rebuilding
+ * what lets `queries/tables.ts` subscribe to each table exactly once instead of rebuilding
  * a WHERE clause every minute.
  *
  * Assembling in JavaScript also keeps the interval maths in `src/core/`, where it is unit
  * tested, instead of pushing a median into SQL where it would not be.
+ *
+ * Row shapes and the TEXT-to-union narrowing live in `rows.ts`, shared with the dishes
+ * list. What is left here is the part that is specifically about *now*: which prep is
+ * live, what counts as recent, and which slot is being answered for.
  */
 
 // ---------------------------------------------------------------------------
-// Row shapes — structurally what `queries/today.ts` selects
+// Inputs
 // ---------------------------------------------------------------------------
-
-export interface DishRow {
-  id: string;
-  name: string;
-  role: string;
-  primaryIngredient: string | null;
-  effort: string;
-  minutes: number | null;
-  isVeg: boolean;
-  prepKind: string | null;
-  prepLabel: string | null;
-  usesLeftoverRice: boolean;
-  season: string | null;
-  ingredientsText: string | null;
-  methodText: string | null;
-  isArchived: boolean;
-  createdAt: string;
-}
-
-export interface DishSlotRow {
-  dishId: string;
-  slot: string;
-}
-
-export interface CookEventRow {
-  dishId: string;
-  cookedAt: string;
-  rating: number | null;
-  isBatch: boolean;
-  isEstimated: boolean;
-}
-
-export interface PrepStateRow {
-  id: string;
-  kind: string;
-  ingredient: string | null;
-  label: string | null;
-  readyAt: string | null;
-  expiresAt: string | null;
-}
 
 export interface TodayInputs {
   dishes: readonly DishRow[];
@@ -80,48 +48,6 @@ export interface TodayInputs {
   cookEvents: readonly CookEventRow[];
   prepStates: readonly PrepStateRow[];
   settings: SettingMap;
-}
-
-// ---------------------------------------------------------------------------
-// Narrowing TEXT columns onto the core unions
-// ---------------------------------------------------------------------------
-
-const EFFORTS: readonly Effort[] = ['instant', 'quick', 'medium', 'project'];
-const SLOTS: readonly Slot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
-const SEASONS: readonly Season[] = ['summer', 'monsoon', 'winter'];
-const PREP_KINDS: readonly PrepKind[] = ['batter', 'soaked', 'marinated'];
-
-/** Unrecognised effort reads as the most expensive one, matching `effortRank`. */
-function asEffort(value: string): Effort {
-  return EFFORTS.includes(value as Effort) ? (value as Effort) : 'project';
-}
-
-function asSlot(value: string): Slot | null {
-  return SLOTS.includes(value as Slot) ? (value as Slot) : null;
-}
-
-/** An unrecognised season is "any season": it never matches and never penalises. */
-function asSeason(value: string | null): Season | null {
-  return value !== null && SEASONS.includes(value as Season) ? (value as Season) : null;
-}
-
-/**
- * Prep kinds are a closed set the app writes itself (SPEC §1.4) — nothing user-typed
- * reaches this column — so an unrecognised value is a bug, and reading it as "no prep"
- * keeps the dish suggestible rather than hiding it forever with no way to find out why.
- */
-function asPrepKind(value: string | null): PrepKind | null {
-  return value !== null && PREP_KINDS.includes(value as PrepKind)
-    ? (value as PrepKind)
-    : null;
-}
-
-function asRating(value: number | null): Rating | null {
-  return value === 1 || value === 2 || value === 3 ? value : null;
-}
-
-function hasText(value: string | null): boolean {
-  return value !== null && value.trim().length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -177,60 +103,6 @@ function elapsedHours(now: Date, at: Date): number {
 function hoursUntil(now: Date, at: Date): number {
   return elapsedHours(at, now);
 }
-
-function groupSlots(rows: readonly DishSlotRow[]): Map<string, Slot[]> {
-  const out = new Map<string, Slot[]>();
-  for (const row of rows) {
-    const slot = asSlot(row.slot);
-    if (slot === null) continue;
-    const existing = out.get(row.dishId);
-    if (existing) existing.push(slot);
-    else out.set(row.dishId, [slot]);
-  }
-  return out;
-}
-
-interface DishEvents {
-  history: CookHistoryEvent[];
-  /** The most recent rating that was actually given. A later unrated cook does not
-   *  erase it — "last rated 1" is about the last time the dish was rated (SPEC §4.3). */
-  lastRating: Rating | null;
-}
-
-/**
- * Groups the cook log by dish. Does not trust the caller's ORDER BY — `summariseHistory`
- * sorts its own input for the same reason, and a `lastRating` that silently depended on
- * the query's sort would be wrong the first time anyone reordered it.
- */
-function groupEvents(
-  rows: readonly CookEventRow[],
-  seen: ReadonlySet<string>,
-): Map<string, DishEvents> {
-  const out = new Map<string, DishEvents>();
-  const ratedAt = new Map<string, number>();
-
-  for (const row of rows) {
-    if (!seen.has(row.dishId)) continue;
-    let entry = out.get(row.dishId);
-    if (!entry) {
-      entry = { history: [], lastRating: null };
-      out.set(row.dishId, entry);
-    }
-
-    const cookedAt = parseLocalIso(row.cookedAt);
-    entry.history.push({ cookedAt, isEstimated: row.isEstimated });
-
-    const rating = asRating(row.rating);
-    // An unrated cook is not an opinion, so it does not overwrite an earlier rating.
-    if (rating !== null && cookedAt.getTime() >= (ratedAt.get(row.dishId) ?? -Infinity)) {
-      entry.lastRating = rating;
-      ratedAt.set(row.dishId, cookedAt.getTime());
-    }
-  }
-  return out;
-}
-
-const NO_EVENTS: DishEvents = { history: [], lastRating: null };
 
 interface ResolvedPrep {
   livePrepDishIds: Set<string>;
@@ -390,7 +262,7 @@ export function buildTodayModel(inputs: TodayInputs, now: Date, slot: Slot): Tod
     display.set(d.id, {
       roleLabel: role?.label ?? d.role,
       minutes: d.minutes,
-      hasRecipe: hasText(d.ingredientsText) || hasText(d.methodText),
+      hasRecipe: hasRecipe(d),
       prepLabel: d.prepLabel,
     });
   }
