@@ -1,139 +1,194 @@
+import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, BackHandler, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackLink } from '../../../src/components/BackLink';
+import { ChipField } from '../../../src/components/ChipField';
 import { GhostButton } from '../../../src/components/GhostButton';
+import { PillToggle } from '../../../src/components/PillToggle';
 import { PrimaryButton } from '../../../src/components/PrimaryButton';
+import { SegmentedField } from '../../../src/components/SegmentedField';
 import { TextField } from '../../../src/components/TextField';
-import type { DishListItem } from '../../../src/db/dishesModel';
-import { type DishRecipeInput, hasRecipeEdits } from '../../../src/db/dishModel';
-import { saveDishRecipe } from '../../../src/db/queries/dish';
+import type { Effort, Slot } from '../../../src/core/types';
+import {
+  blankDishValues,
+  canSaveDish,
+  type DishFormInput,
+  type DishFormValues,
+  dishFormProblems,
+  EFFORT_OPTIONS,
+  hasDishEdits,
+  SLOT_OPTIONS,
+  toDishFormInput,
+} from '../../../src/db/dishModel';
+import { createDish, saveDish } from '../../../src/db/queries/dish';
+import { roleConfigQuery } from '../../../src/db/queries/roles';
+import type { RoleConfigRow } from '../../../src/db/roles';
 import { useDish } from '../../../src/hooks/useDishes';
 import { useKeyboardInset } from '../../../src/hooks/useKeyboardInset';
 import { layout, space, type Theme } from '../../../src/theme/tokens';
 import { useThemedStyles } from '../../../src/theme/useTheme';
 
 /**
- * The recipe editor: ingredients, method, and the dish's own notes.
+ * The dish editor: who the dish is, how you make it, and what is always true about it.
  *
- * `IMPLEMENTATION.md` §3 sketches this route as "add/edit dish + recipe". Phase 7 owns the
- * recipe and the notes only, so that is all it edits — the dish's identity (name, role,
- * effort, slots) is not editable anywhere yet, and when it becomes editable it widens this
- * screen rather than needing another route.
+ * **One route for both adding and editing**, which is what `IMPLEMENTATION.md` §3 sketched
+ * ("add/edit dish + recipe") and what Phase 7 deferred half of. `id` is `new` for a dish
+ * that does not exist yet — safe as a sentinel because every real id is a UUID.
  *
- * **Free text on purpose.** No structured ingredient rows, no unit picker, no required
- * fields, and no completion meter (`docs/SPEC.md` §12 and the empty-state rule in
- * `CLAUDE.md`). Saving all three fields blank is a perfectly good outcome: it clears the
- * recipe and leaves a normal dish.
+ * Phase 7 shipped the recipe half alone and said the identity fields would widen this route
+ * whenever they arrived. Phase 8 is what made them urgent: with the seed no longer loading
+ * itself, a dish the user unticked during onboarding — or one the seed never had — had no
+ * way into the repertoire at all (`docs/SPEC.md` §19).
  *
- * This is the one screen in the app holding text that exists nowhere else until it is saved,
- * so leaving with unsaved edits asks first — see `guardedExit` below.
+ * **Two fields are required and the rest are not.** A dish needs a name to be found and at
+ * least one meal slot to ever be suggested (§4.1, filter 3); everything else, the entire
+ * recipe included, is optional. A dish with no recipe is a normal dish (§17.2) and adding
+ * identity fields does not quietly reverse that.
  */
-export default function EditDishRecipe() {
+export default function EditDish() {
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { dish, isReady, error } = useDish(id);
+  const isNew = id === 'new';
+
+  const { dish, isReady, error } = useDish(isNew ? undefined : id);
+  const roleRows = useLiveQuery(roleConfigQuery());
+  const roles = useMemo(() => roleRows.data ?? [], [roleRows.data]);
+
+  // A stored dish, or the shape of one. A new dish waits on `role_config` — it supplies
+  // both the chip labels and the role the form opens on, and it is seeded at boot, so this
+  // is one frame at most.
+  const saved: DishFormValues | undefined = isNew
+    ? roles.length === 0
+      ? undefined
+      : blankDishValues(roles[0].role)
+    : dish;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       {error ? (
         <View style={styles.gutter}>
-          <BackLink label="Dish" onPress={() => router.back()} />
+          <BackLink label="Back" onPress={() => router.back()} />
           <Text style={styles.error}>{error.message}</Text>
         </View>
-      ) : dish === undefined ? (
+      ) : saved === undefined ? (
         <View style={styles.gutter}>
-          <BackLink label="Dish" onPress={() => router.back()} />
+          <BackLink label="Back" onPress={() => router.back()} />
           {/* Only a real miss once the read has landed; before that it is just loading. */}
-          {isReady ? (
+          {isReady && !isNew ? (
             <Text style={styles.missing}>That dish is no longer in your repertoire.</Text>
           ) : null}
         </View>
       ) : (
-        // Keyed by dish, so the three inputs initialise from the row rather than from the
+        // Keyed by dish, so the inputs initialise from the row rather than from the
         // undefined it was before the live query landed.
-        <RecipeForm key={dish.id} dish={dish} onDone={() => router.back()} />
+        <DishForm
+          key={isNew ? 'new' : dish?.id}
+          dishId={isNew ? undefined : dish?.id}
+          saved={saved}
+          roles={roles}
+          onCancel={() => router.back()}
+          onSaved={(dishId) =>
+            // `replace`, not `push`: after adding a dish you want to be looking at it, and
+            // the way back should be the list rather than the form you just left.
+            isNew ? router.replace(`/dish/${dishId}`) : router.back()
+          }
+        />
       )}
     </SafeAreaView>
   );
 }
 
-/** The three fields, in the order they appear. */
-type FieldKey = 'ingredients' | 'method' | 'notes';
+/** Every field that can take focus, so the keyboard handling can scroll to any of them. */
+type FieldKey =
+  | 'name'
+  | 'altName'
+  | 'primaryIngredient'
+  | 'minutes'
+  | 'ingredients'
+  | 'method'
+  | 'notes';
 
-function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }) {
+function DishForm({
+  dishId,
+  saved,
+  roles,
+  onCancel,
+  onSaved,
+}: {
+  /** Undefined for a dish that does not exist yet — which is what makes this the add form. */
+  dishId: string | undefined;
+  saved: DishFormValues;
+  roles: readonly RoleConfigRow[];
+  onCancel: () => void;
+  onSaved: (dishId: string) => void;
+}) {
   const styles = useThemedStyles(makeStyles);
+  const isNew = dishId === undefined;
 
-  const [ingredientsText, setIngredientsText] = useState(dish.ingredientsText ?? '');
-  const [methodText, setMethodText] = useState(dish.methodText ?? '');
-  const [notes, setNotes] = useState(dish.notes ?? '');
+  const [input, setInput] = useState<DishFormInput>(() => toDishFormInput(saved));
+  const set = <K extends keyof DishFormInput>(key: K, value: DishFormInput[K]) =>
+    setInput((current) => ({ ...current, [key]: value }));
 
-  const input: DishRecipeInput = { ingredientsText, methodText, notes };
-  const edited = hasRecipeEdits(input, dish);
+  const edited = hasDishEdits(input, saved);
+  const problems = dishFormProblems(input);
 
   /**
    * Keeping the field you are typing in above the keyboard.
    *
-   * `KeyboardAvoidingView` used to be here and did nothing on Android: edge-to-edge is
-   * mandatory in this SDK, so the window no longer resizes and there is no inset for it to
-   * mirror. Notes is the last field on the screen, which is why it was the one you could not
-   * see. `useKeyboardInset` explains the platform detail.
-   *
-   * Two parts, and both are needed. The inset becomes scrollable room at the bottom, or there
-   * is nowhere for the last field to go. Then the focused field is scrolled to the top of
-   * what is left, which is what actually puts it in front of you — shrinking the viewport on
-   * its own leaves the scroll offset where it was and the field below the fold.
+   * `KeyboardAvoidingView` does nothing on Android: edge-to-edge is mandatory in this SDK,
+   * so the window no longer resizes and there is no inset for it to mirror.
+   * `useKeyboardInset` explains the platform detail. Two parts, and both are needed — the
+   * inset becomes scrollable room at the bottom, then the focused field is scrolled to the
+   * top of what is left. Shrinking the viewport alone leaves the scroll offset where it was
+   * and the field below the fold.
    */
   const scrollRef = useRef<ScrollView>(null);
   const keyboardInset = useKeyboardInset();
   const [focused, setFocused] = useState<FieldKey | null>(null);
 
-  // Where each field sits in the scrolled content. Measured in two parts because `onLayout`
-  // reports a child's offset inside its own parent, and the fields live in a container that
-  // is itself offset from the top of the content.
+  // Where each field sits in the scrolled content. Measured in two parts because
+  // `onLayout` reports a child's offset inside its own parent, and the fields live in a
+  // container that is itself well down the page — the identity blurb and the title sit
+  // above it. Adding only the inner offset scrolls short by the height of the header.
   const formTop = useRef(0);
-  const fieldTops = useRef<Record<FieldKey, number>>({
-    ingredients: 0,
-    method: 0,
-    notes: 0,
-  });
+  const fieldTops = useRef<Partial<Record<FieldKey, number>>>({});
 
   // Keyed on the inset as well as the field, so the order of "focus fired" and "keyboard
   // finished animating" stops mattering: focusing scrolls with the room available now, and
-  // the arriving inset scrolls again with the room there turned out to be. A single scroll on
-  // focus alone gets clamped short, because the padding it needs does not exist yet.
+  // the arriving inset scrolls again with the room there turned out to be.
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyboardInset is the trigger
   useEffect(() => {
     if (focused === null) return;
     scrollRef.current?.scrollTo({
-      y: Math.max(formTop.current + fieldTops.current[focused] - space.lg, 0),
+      y: Math.max(formTop.current + (fieldTops.current[focused] ?? 0) - space.lg, 0),
       animated: true,
     });
-    // `keyboardInset` is not read in the body and is not meant to be. It is here as a
-    // trigger: removing it — which is what the rule's own fix suggests — leaves only the
-    // scroll that happens before the padding exists, and the bug comes straight back.
   }, [focused, keyboardInset]);
 
   /**
    * Leaving without saving, with a confirmation only when there is something to lose.
    *
    * The recipe is the longest thing anyone types into this app and the only text with no
-   * copy anywhere else, so a stray back gesture mid-sentence must not be able to bin it.
-   * `hasRecipeEdits` trims both sides, so this stays quiet on the way out of a screen that
-   * was only read.
+   * copy anywhere else. `hasDishEdits` trims the text and ignores slot order, so this stays
+   * quiet on the way out of a screen that was only read.
    */
   const guardedExit = useCallback(() => {
     if (!edited) {
-      onDone();
+      onCancel();
       return;
     }
-    Alert.alert('Discard changes?', "The text you've typed won't be saved.", [
-      { text: 'Keep editing', style: 'cancel' },
-      { text: 'Discard', style: 'destructive', onPress: onDone },
-    ]);
-  }, [edited, onDone]);
+    Alert.alert(
+      isNew ? 'Discard this dish?' : 'Discard changes?',
+      "The text you've typed won't be saved.",
+      [
+        { text: 'Keep editing', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: onCancel },
+      ],
+    );
+  }, [edited, isNew, onCancel]);
 
   // Android's hardware back would otherwise discard silently. iOS has no back gesture on
   // this route — the root layout disables it — so Save and Cancel are the only ways out of
@@ -146,7 +201,6 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
     return () => subscription.remove();
   }, [guardedExit]);
 
-  /** Focus and blur for one field. Blur only clears if focus has not already moved on. */
   function focusProps(key: FieldKey) {
     return {
       onFocus: () => setFocused(key),
@@ -161,12 +215,24 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
     };
   }
 
+  function save() {
+    // Belt and braces: the button is already disabled, but a dish with no slot is
+    // permanently unsuggestable and nothing downstream would ever say why.
+    if (!canSaveDish(input)) return;
+
+    if (dishId === undefined) {
+      onSaved(createDish(input));
+      return;
+    }
+    saveDish(dishId, input);
+    // No invalidation: `useLiveQuery` re-runs on the write, so the screen behind has the
+    // new text before this one finishes popping.
+    onSaved(dishId);
+  }
+
   return (
     <ScrollView
       ref={scrollRef}
-      // The keyboard's height becomes scrollable room, which is what gives the last field
-      // somewhere to go. `paddingBottom` rather than a spacer view so it collapses to nothing
-      // when the keyboard is down and leaves no dead space behind.
       contentContainerStyle={[
         styles.scroll,
         { paddingBottom: space.xxl + keyboardInset },
@@ -175,13 +241,14 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
       // lands on a button that has moved.
       keyboardShouldPersistTaps="handled"
     >
-      <BackLink label={dish.name} onPress={guardedExit} />
+      <BackLink label={isNew ? 'Dishes' : saved.name} onPress={guardedExit} />
 
-      <Text style={styles.eyebrow}>{dish.name}</Text>
-      <Text style={styles.title}>Recipe &amp; notes</Text>
+      <Text style={styles.eyebrow}>{isNew ? 'New dish' : saved.name}</Text>
+      <Text style={styles.title}>{isNew ? 'Add a dish' : 'Edit dish'}</Text>
       <Text style={styles.blurb}>
-        However much or little you want. Free text — no units to fill in, nothing
-        required.
+        {isNew
+          ? 'A name and a meal is all it takes. Everything else you can fill in whenever — or never.'
+          : 'Change as much or as little as you like. Nothing here is required except the name and a meal.'}
       </Text>
 
       <View
@@ -190,11 +257,106 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
           formTop.current = event.nativeEvent.layout.y;
         }}
       >
+        <View onLayout={measure('name')}>
+          <TextField
+            label="Name"
+            value={input.name}
+            onChangeText={(value) => set('name', value)}
+            placeholder="Gutti vankaya"
+            multiline={false}
+            autoCapitalize="words"
+            {...focusProps('name')}
+          />
+        </View>
+
+        <View onLayout={measure('altName')}>
+          <TextField
+            label="Also called"
+            value={input.altName}
+            onChangeText={(value) => set('altName', value)}
+            placeholder="Stuffed brinjal curry"
+            hint="A regional or English name. Searched alongside the name."
+            multiline={false}
+            autoCapitalize="words"
+            {...focusProps('altName')}
+          />
+        </View>
+
+        {/* Labels come from `role_config`, never from the raw role string, so a renamed
+            role shows its new name here too (SPEC §1.1). */}
+        <ChipField
+          label="Role"
+          options={roles.map((role) => ({ value: role.role, label: role.label }))}
+          selected={[input.role]}
+          onToggle={(role) => set('role', role)}
+        />
+
+        {/* Many-to-many on purpose: tiffin is valid at breakfast *and* dinner (§1.3). */}
+        <ChipField
+          label="Meals"
+          options={SLOT_OPTIONS}
+          selected={input.slots}
+          multiple
+          onToggle={(slot: Slot) =>
+            set(
+              'slots',
+              input.slots.includes(slot)
+                ? input.slots.filter((current) => current !== slot)
+                : [...input.slots, slot],
+            )
+          }
+          hint="When you'd actually eat this. Pick as many as fit."
+        />
+
+        <SegmentedField
+          label="Effort"
+          options={EFFORT_OPTIONS}
+          value={input.effort}
+          onChange={(effort: Effort) => set('effort', effort)}
+        />
+
+        <View onLayout={measure('minutes')}>
+          <TextField
+            label="Minutes"
+            value={input.minutes}
+            onChangeText={(value) => set('minutes', value)}
+            placeholder="30"
+            hint="Shown on the card. Never used to rank anything."
+            multiline={false}
+            keyboardType="number-pad"
+            {...focusProps('minutes')}
+          />
+        </View>
+
+        <View onLayout={measure('primaryIngredient')}>
+          <TextField
+            label="Main ingredient"
+            value={input.primaryIngredient}
+            onChangeText={(value) => set('primaryIngredient', value)}
+            placeholder="brinjal"
+            hint="Searchable, and it stops the app suggesting this two days running."
+            multiline={false}
+            autoCapitalize="none"
+            {...focusProps('primaryIngredient')}
+          />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.fieldLabel}>Vegetarian</Text>
+          <PillToggle
+            label={input.isVeg ? 'Vegetarian' : 'Contains meat or fish'}
+            selected={input.isVeg}
+            onPress={() => set('isVeg', !input.isVeg)}
+          />
+        </View>
+
+        <View style={styles.rule} />
+
         <View onLayout={measure('ingredients')}>
           <TextField
             label="Ingredients"
-            value={ingredientsText}
-            onChangeText={setIngredientsText}
+            value={input.ingredientsText}
+            onChangeText={(value) => set('ingredientsText', value)}
             placeholder={'1 cup toor dal\n2 green chillies\nlemon-sized tamarind'}
             hint="One per line."
             lines={6}
@@ -205,8 +367,8 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
         <View onLayout={measure('method')}>
           <TextField
             label="Method"
-            value={methodText}
-            onChangeText={setMethodText}
+            value={input.methodText}
+            onChangeText={(value) => set('methodText', value)}
             placeholder={'Pressure cook 4 whistles.\n\nTemper and pour over.'}
             hint="Leave a blank line between steps."
             lines={8}
@@ -215,13 +377,12 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
         </View>
 
         {/* The third kind of note, and the one that changes least: what is true about the
-            dish every time. Per-cook observations belong on the cook event, which is what
-            the log sheet writes and the timeline shows. */}
+            dish every time. Per-cook observations belong on the cook event. */}
         <View onLayout={measure('notes')}>
           <TextField
             label="Notes"
-            value={notes}
-            onChangeText={setNotes}
+            value={input.notes}
+            onChangeText={(value) => set('notes', value)}
             placeholder="Better the next day. Travels well."
             hint="About the dish itself, not about one cook."
             lines={3}
@@ -231,14 +392,15 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
       </View>
 
       <View style={styles.actions}>
+        {/* Says what is missing *before* the button refuses, so a disabled Save is never a
+            dead end you have to guess your way out of. */}
+        {problems.length === 0 ? null : (
+          <Text style={styles.problems}>Nearly — {problems.join(' and ')}.</Text>
+        )}
         <PrimaryButton
-          label="Save"
-          onPress={() => {
-            saveDishRecipe(dish.id, input);
-            // No invalidation: `useLiveQuery` re-runs on the write, so the screen behind
-            // has the new text before this one finishes popping.
-            onDone();
-          }}
+          label={isNew ? 'Add dish' : 'Save'}
+          disabled={problems.length > 0}
+          onPress={save}
         />
         <GhostButton label="Cancel" onPress={guardedExit} />
       </View>
@@ -274,9 +436,25 @@ const makeStyles = ({ colors, text }: Theme) => ({
     marginTop: space.xxl,
     gap: space.xl,
   },
+  field: {
+    gap: 7,
+  },
+  fieldLabel: {
+    ...text.eyebrow,
+  },
+  // Where the dish's identity ends and the recipe begins.
+  rule: {
+    height: 1,
+    backgroundColor: colors.lineSoft,
+    marginVertical: space.xs,
+  },
   actions: {
     marginTop: space.xxl,
     gap: space.md,
+  },
+  problems: {
+    ...text.bodySmall,
+    color: colors.ink2,
   },
   error: {
     ...text.bodySmall,

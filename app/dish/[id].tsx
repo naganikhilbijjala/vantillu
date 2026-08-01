@@ -6,6 +6,7 @@ import { CookTimeline } from '../../src/components/CookTimeline';
 import { IntervalGauge } from '../../src/components/IntervalGauge';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
 import { Recipe } from '../../src/components/Recipe';
+import { SmallButton } from '../../src/components/SmallButton';
 import { StatGrid, StatTile } from '../../src/components/StatTile';
 import type { CookTimelineEntry } from '../../src/db/cookModel';
 import { type DishListItem, patternSummary } from '../../src/db/dishesModel';
@@ -127,6 +128,16 @@ function Body({
 
       <Text style={styles.slots}>{slots}</Text>
 
+      {/* The editor holds the dish's identity as well as its recipe now, so there has to be
+          a way in that is not labelled "recipe" — a name typed wrong during onboarding is
+          otherwise only fixable through a button that says it edits something else. */}
+      <View style={styles.editAction}>
+        <SmallButton
+          label="Edit dish"
+          onPress={() => router.push(`/dish/edit/${dish.id}`)}
+        />
+      </View>
+
       <Text style={styles.heading}>Recipe</Text>
       <Recipe
         ingredients={dish.ingredientsText}
@@ -199,6 +210,9 @@ const makeStyles = ({ colors, text }: Theme) => ({
   },
   slots: {
     ...text.bodySmall,
+    marginTop: space.lg,
+  },
+  editAction: {
     marginTop: space.lg,
   },
   notes: {

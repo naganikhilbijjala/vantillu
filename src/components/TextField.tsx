@@ -1,4 +1,4 @@
-import { Text, TextInput, View } from 'react-native';
+import { type KeyboardTypeOptions, Text, TextInput, View } from 'react-native';
 import { border, radius, type Theme } from '../theme/tokens';
 import { useTheme, useThemedStyles } from '../theme/useTheme';
 
@@ -26,6 +26,15 @@ export interface TextFieldProps {
   hint?: string;
   /** Roughly how many lines it opens at. It grows with the content either way. */
   lines?: number;
+  /**
+   * Off for a dish's name, its regional name, and its minutes — one-line answers where a
+   * growing box invites a paragraph nobody wants to write. Everything the app was built
+   * around first (notes, recipes) is multiline, so that stays the default.
+   */
+  multiline?: boolean;
+  keyboardType?: KeyboardTypeOptions;
+  /** Dish and ingredient names are not sentences; the phone should stop capitalising them. */
+  autoCapitalize?: 'none' | 'sentences' | 'words';
   /** Defaults to `label`, which is right unless the label is only meaningful in context. */
   accessibilityLabel?: string;
   /**
@@ -47,6 +56,9 @@ export function TextField({
   placeholder,
   hint,
   lines = 2,
+  multiline = true,
+  keyboardType,
+  autoCapitalize,
   accessibilityLabel,
   onFocus,
   onBlur,
@@ -64,8 +76,13 @@ export function TextField({
         placeholderTextColor={colors.ink3}
         onFocus={onFocus}
         onBlur={onBlur}
-        style={[styles.input, { minHeight: lines * LINE_HEIGHT + VERTICAL_PADDING }]}
-        multiline
+        style={[
+          styles.input,
+          { minHeight: (multiline ? lines : 1) * LINE_HEIGHT + VERTICAL_PADDING },
+        ]}
+        multiline={multiline}
+        keyboardType={keyboardType}
+        autoCapitalize={autoCapitalize}
         // Android centres multiline text vertically without this, so a tall empty field
         // opens with its placeholder floating in the middle of the box.
         textAlignVertical="top"

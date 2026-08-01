@@ -1,4 +1,5 @@
 import seedFile from '../../assets/seed_dishes.json';
+import type { NewDishRow, NewDishSlotRow } from './rows';
 
 /**
  * The seed repertoire, normalised — and the mapping from it onto `dish` rows.
@@ -83,41 +84,6 @@ export interface SeedCatalogEntry {
   isFestive: boolean;
   season: string | null;
   slots: string[];
-}
-
-/** Exactly the columns `dish` declares, as `seedCatalog` supplies them. */
-export interface NewDishRow {
-  id: string;
-  name: string;
-  altName: string | null;
-  role: string;
-  primaryIngredient: string | null;
-  effort: string;
-  minutes: number | null;
-  isVeg: boolean;
-  prepKind: string | null;
-  prepLeadHours: number | null;
-  prepLabel: string | null;
-  usesLeftoverRice: boolean;
-  isFestive: boolean;
-  season: string | null;
-  ingredientsText: string | null;
-  methodText: string | null;
-  notes: string | null;
-  source: string | null;
-  isArchived: boolean;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-}
-
-/** Exactly the columns `dish_slot` declares. */
-export interface NewDishSlotRow {
-  dishId: string;
-  slot: string;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
 }
 
 function toCatalogEntry(seed: SeedDish): SeedCatalogEntry {

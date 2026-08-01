@@ -901,6 +901,10 @@ turns a count into a target.
 
 ### 17.3 The editor
 
+> **Widened by §19**, right after Phase 8. The identity fields this section says are missing
+> arrived on this same route, as the last paragraph below predicted they would. Everything
+> else here still holds.
+
 One screen, `app/dish/edit/[id].tsx`, reached from the Recipe section's button. Three fields —
 ingredients, method, notes — all optional, all free text, no units to fill in, nothing
 required. Saving with everything blank is a valid outcome: it clears the recipe and leaves a
@@ -1044,3 +1048,104 @@ All of it — the dishes, their slots, the estimates, and the marker — lands i
 transaction**. It is the only place in the app that writes three tables at once, and a crash
 halfway would leave a repertoire with no slots, on the one screen the user cannot easily
 reach a second time.
+
+---
+
+## 19. Adding and editing a dish
+
+Added immediately after Phase 8, because Phase 8 is what made it necessary. §17.3 had noted
+that a dish's identity was not editable anywhere and there was no path that *added* one;
+that was survivable while first launch inserted all sixty-eight seed dishes. Once the seed
+became a list you pick from, it stopped being: a dish unticked in onboarding, or one the
+seed never had, had **no way into the repertoire at all**.
+
+### 19.1 One route, widening the recipe editor
+
+`app/dish/edit/[id].tsx`, with `id = new` for a dish that does not exist yet — safe as a
+sentinel because every real id is a UUID (§11.2). This is what `IMPLEMENTATION.md` §3
+sketched all along ("add/edit dish + recipe") and what §17.3 promised: *"whenever those
+fields arrive they widen this route rather than needing another one."*
+
+The form is the dish's identity, then a rule, then the recipe:
+
+| Field | Control | Required |
+|---|---|---|
+| Name | one-line text | **yes** |
+| Also called | one-line text | no |
+| Role | chips, from `role_config` | opens on the first role |
+| Meals | chips, multi-select | **yes, at least one** |
+| Effort | segmented, 4 | defaults to `medium` |
+| Minutes | numeric text | no |
+| Main ingredient | one-line text | no |
+| Vegetarian | toggle | defaults to on |
+| Ingredients / Method / Notes | as §17 | no |
+
+**Two fields are required, and both are load-bearing rather than tidiness.** A dish with no
+name cannot be found or picked. A dish with **no slot fails eligibility filter 3 forever**
+(§4.1) — and that filter is one of the *silent* ones, so the dish would sit in the
+repertoire looking perfectly normal and never once be suggested. That is the worst kind of
+bug: invisible, and indistinguishable from the engine simply not liking the dish. Everything
+else stays optional, the whole recipe included; §17.2's rule that a dish with no recipe is a
+normal dish is not quietly reversed by the arrival of identity fields.
+
+Slots open **empty** rather than pre-ticked. There is no defensible guess — pre-ticking
+lunch and dinner would file a breakfast tiffin under the wrong meals for anyone who tapped
+straight past — which is exactly why the empty set has to block the save instead.
+
+The Save button is disabled while either is missing, and a line above it says which: *"Nearly
+— give it a name and pick at least one meal."* A disabled button with no explanation is a
+dead end you have to guess your way out of.
+
+### 19.2 Seven fields the form cannot set, and therefore must not clear
+
+`prepKind`, `prepLeadHours`, `prepLabel`, `season`, `usesLeftoverRice`, `isFestive` and
+`source` are **absent from the update**, not written as null. The seed sets them; the form
+does not ask; leaving them out of the UPDATE statement is what stops fixing a typo in
+"Dosa" from silently wiping the fact that it needs batter.
+
+A dish added by hand therefore has none of them: no prep to wait for, no season, no
+leftover-rice boost. That is the honest default — they are all claims about the dish that
+nobody has made yet — and each has a real cost to expose. `prepKind` in particular
+**hard-excludes** a dish until a matching live `prep_state` row exists (§5.2), so offering
+it in a form before Phase 9 builds the prep writer would let someone hide a dish from
+themselves with no way to find out why. Revisit with Phase 9.
+
+`minutes` is display-only (§1.2), so a value that is not a plain positive number is
+**dropped rather than rejected**. Being unable to save a dish over a typo in the one field
+that changes nothing would be absurd.
+
+### 19.3 Slots are replaced, not diffed
+
+Saving soft-deletes every `dish_slot` row for the dish and then upserts the chosen ones —
+two statements, no diffing, in the same transaction as the dish row. The upsert has to
+*revive* rather than insert, because the composite primary key means a slot turned off and
+on again is still physically there with a `deletedAt` on it.
+
+The transaction is not optional. A dish committed without its slots is not half-saved; it is
+that invisible dish from §19.1.
+
+### 19.4 Where you reach it
+
+Three entry points, all of which existed as dead ends before:
+
+- **Dishes tab header — "Add a dish".** The screen that answers *what do I cook* is where
+  you say what you cook. Not Today, whose FAB already means something else.
+- **The dishes list's empty state**, which invited an action that did not exist. Only when
+  the list is genuinely empty, not when a filter emptied it — the move there is to clear the
+  filter, which is already on screen.
+- **The detail screen — "Edit dish"**, next to the meal slots. The Recipe section's own
+  button still goes to the same place, but a name typed wrong needs a way in that is not
+  labelled "recipe".
+
+### 19.5 What it deliberately does not do
+
+- **No delete.** Soft deletes are wired through the schema (§11.3) and nothing exposes them.
+  Archiving is the better answer for "I don't make this any more" — it keeps the history that
+  is the whole point of the app — and neither has a UI yet. A product decision, not a task.
+- **No re-import from the starter list.** An unticked seed dish is re-addable by typing it
+  in, which is the same work as any other new dish. A screen offering the seed rows not
+  already in the repertoire would be a nicety worth having and is not required for the app
+  to be complete.
+- **Roles are still not editable.** §1.1 says they are renameable "later", and everything
+  downstream already reads the label and the flag from `role_config` rather than from the
+  string, so the day that screen arrives nothing else has to change.

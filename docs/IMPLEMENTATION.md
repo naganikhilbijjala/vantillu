@@ -578,6 +578,16 @@ there is no way to see it twice short of uninstalling. It hard-deletes, unlike e
 delete in the app — a reset that left sixty-eight tombstones behind would not be the fresh
 install it claims to be.
 
+**Adding a dish had to follow immediately, in the same session.** Phase 7 recorded that the
+dish's identity was not editable and that nothing *added* a dish; that was survivable while
+first launch inserted all sixty-eight. Once the seed became a list you pick from, it was not:
+an unticked dish, or one the seed never had, had no way into the repertoire at all. So
+`dish/edit/[id].tsx` widened to the "add/edit dish + recipe" that §3 always sketched, with
+`id = new` for a dish that does not exist yet. SPEC §19 has the field list and the two
+required fields; the short version is that a dish with no meal slot fails a *silent*
+eligibility filter and is invisible forever, so that is the one thing besides a name the form
+will not let you skip.
+
 ### Phase 9 — prep notifications
 `expo-notifications`, local only. Schedule a nudge `prepLeadHours` before the dish's
 usual slot. Manage `prepState` lifecycle: created, ready, expired.

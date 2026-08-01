@@ -89,6 +89,13 @@ the same occasions and splitting them across two screens would be three taps to 
 one recipe. Sharing an editor does not make them one field: `notes` is what is true about the
 dish every time, the recipe body is how you make it, and neither is a `tweakNote`.
 
+That route also adds and edits the dish's **identity** — name, role, effort, slots (`id=new`
+adds one). A dish needs a name and **at least one slot**: no slot fails a *silent*
+eligibility filter, so the dish sits in the repertoire and is never once suggested. The
+seven fields the form can't set — `prepKind`, `prepLeadHours`, `prepLabel`, `season`,
+`usesLeftoverRice`, `isFestive`, `source` — are left out of the UPDATE rather than written
+as null, so editing a seeded dish can't wipe them (`docs/SPEC.md` §19).
+
 ## Suggestion logic
 
 Hard filters first, then weighted score. Both live in `src/core/scoring.ts`.

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DishListRow } from '../../src/components/DishListRow';
 import { RoleFilterRow } from '../../src/components/RoleFilterRow';
 import { SearchField } from '../../src/components/SearchField';
+import { SmallButton } from '../../src/components/SmallButton';
 import { ALL_ROLES, filterDishes } from '../../src/db/dishesModel';
 import { useDishes } from '../../src/hooks/useDishes';
 import { border, layout, radius, space, type Theme } from '../../src/theme/tokens';
@@ -39,11 +40,17 @@ export default function Dishes() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.eyebrow}>
-          {dishes.length} {dishes.length === 1 ? 'dish' : 'dishes'} · {recipeCount} with
-          {recipeCount === 1 ? ' a recipe' : ' recipes'}
-        </Text>
-        <Text style={styles.title}>Your repertoire</Text>
+        <View style={styles.headerText}>
+          <Text style={styles.eyebrow}>
+            {dishes.length} {dishes.length === 1 ? 'dish' : 'dishes'} · {recipeCount} with
+            {recipeCount === 1 ? ' a recipe' : ' recipes'}
+          </Text>
+          <Text style={styles.title}>Your repertoire</Text>
+        </View>
+        {/* The only way into the repertoire besides onboarding, which runs once. Here
+            rather than on Today because this is the screen that answers "what do I cook",
+            and because Today's FAB already means something else. */}
+        <SmallButton label="Add a dish" onPress={() => router.push('/dish/edit/new')} />
       </View>
 
       <View style={styles.gutter}>
@@ -67,7 +74,12 @@ export default function Dishes() {
           )}
           ListEmptyComponent={
             // Nothing at all until the first read lands; an empty state would flash.
-            isReady ? <EmptyState isFiltered={isFiltered} /> : null
+            isReady ? (
+              <EmptyState
+                isFiltered={isFiltered}
+                onAdd={() => router.push('/dish/edit/new')}
+              />
+            ) : null
           }
           ListFooterComponent={
             // Throwaway, like the screen it points at. Goes when Phase 9 builds real prep
@@ -82,7 +94,7 @@ export default function Dishes() {
   );
 }
 
-function EmptyState({ isFiltered }: { isFiltered: boolean }) {
+function EmptyState({ isFiltered, onAdd }: { isFiltered: boolean; onAdd: () => void }) {
   const styles = useThemedStyles(makeStyles);
 
   return (
@@ -92,6 +104,14 @@ function EmptyState({ isFiltered }: { isFiltered: boolean }) {
           ? 'Nothing matches that. Try a different role, or search by an ingredient.'
           : 'No dishes yet. Add the things you already cook and the rest follows.'}
       </Text>
+      {/* Inviting, never nagging: an empty repertoire offers the next move rather than
+          pointing out that it is empty. Not while filtered — the move there is to clear
+          the filter, which is already on screen. */}
+      {isFiltered ? null : (
+        <View style={styles.emptyAction}>
+          <SmallButton label="Add a dish" onPress={onAdd} />
+        </View>
+      )}
     </View>
   );
 }
@@ -102,9 +122,17 @@ const makeStyles = ({ colors, text }: Theme) => ({
     backgroundColor: colors.steel2,
   },
   header: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    justifyContent: 'space-between' as const,
+    gap: space.lg,
     paddingHorizontal: layout.screenPaddingH,
     paddingTop: space.md,
     paddingBottom: space.lg,
+  },
+  headerText: {
+    flex: 1,
+    minWidth: 0,
   },
   gutter: {
     paddingHorizontal: layout.screenPaddingH,
@@ -132,6 +160,10 @@ const makeStyles = ({ colors, text }: Theme) => ({
   emptyText: {
     ...text.bodySmall,
     textAlign: 'center' as const,
+  },
+  emptyAction: {
+    alignItems: 'center' as const,
+    marginTop: space.lg,
   },
   error: {
     ...text.bodySmall,

@@ -49,6 +49,48 @@ export interface DishSlotRow {
   slot: string;
 }
 
+/**
+ * Exactly the columns `dish` declares, for the two places that insert one: the onboarding
+ * picker via `seedCatalog.ts`, and the dish editor via `dishModel.ts`.
+ *
+ * Declared structurally rather than imported from `schema.ts`, the same way
+ * `NewCookEventRow` is — the write shapes belong beside the read shapes, and this module
+ * stays free of drizzle so it keeps running in Node.
+ */
+export interface NewDishRow {
+  id: string;
+  name: string;
+  altName: string | null;
+  role: string;
+  primaryIngredient: string | null;
+  effort: string;
+  minutes: number | null;
+  isVeg: boolean;
+  prepKind: string | null;
+  prepLeadHours: number | null;
+  prepLabel: string | null;
+  usesLeftoverRice: boolean;
+  isFestive: boolean;
+  season: string | null;
+  ingredientsText: string | null;
+  methodText: string | null;
+  notes: string | null;
+  source: string | null;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+/** Exactly the columns `dish_slot` declares. */
+export interface NewDishSlotRow {
+  dishId: string;
+  slot: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
 export interface CookEventRow {
   dishId: string;
   cookedAt: string;

@@ -7,16 +7,28 @@ import { useThemedStyles } from '../theme/useTheme';
 export interface PrimaryButtonProps {
   label: string;
   onPress?: () => void;
+  /**
+   * For a form that genuinely cannot be saved yet. Use it only where something *else* on
+   * the screen says what is missing — a button that refuses without explaining is worse
+   * than one that lets you try and then tells you.
+   */
+  disabled?: boolean;
 }
 
-export function PrimaryButton({ label, onPress }: PrimaryButtonProps) {
+export function PrimaryButton({ label, onPress, disabled = false }: PrimaryButtonProps) {
   const styles = useThemedStyles(makeStyles);
 
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+      style={({ pressed }) => [
+        styles.button,
+        disabled && styles.buttonDisabled,
+        pressed && !disabled && styles.buttonPressed,
+      ]}
     >
       <Text style={styles.label}>{label}</Text>
     </Pressable>
@@ -34,6 +46,10 @@ const makeStyles = ({ colors }: Theme) => ({
   },
   buttonPressed: {
     opacity: 0.88,
+  },
+  // Enough to read as unavailable, not so little that the label stops being legible.
+  buttonDisabled: {
+    opacity: 0.4,
   },
   label: {
     fontFamily: fonts.sansMedium,

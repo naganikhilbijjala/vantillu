@@ -4,14 +4,9 @@ import { db } from '../client';
 import type { NewCookEventRow } from '../cookModel';
 import type { LastCookedBucket } from '../onboardingModel';
 import { toEstimatedCookEventRow } from '../onboardingModel';
+import type { NewDishRow, NewDishSlotRow } from '../rows';
 import { cookEvent, dish, dishSlot, setting } from '../schema';
-import {
-  type NewDishRow,
-  type NewDishSlotRow,
-  type SeedCatalogEntry,
-  toDishRow,
-  toDishSlotRows,
-} from '../seedCatalog';
+import { type SeedCatalogEntry, toDishRow, toDishSlotRows } from '../seedCatalog';
 import { SETTING_KEYS } from '../settings';
 import { toLocalIso } from '../time';
 

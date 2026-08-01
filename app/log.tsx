@@ -19,6 +19,9 @@ import { slotForDate } from '../src/core/slots';
 import type { Slot } from '../src/core/types';
 import { confirmationFor } from '../src/db/cookModel';
 import { ALL_ROLES, type DishListItem, filterDishes } from '../src/db/dishesModel';
+// Shared with the dish editor, which offers the same four. Two copies would eventually
+// disagree about whether `snack` is a real slot.
+import { SLOT_OPTIONS } from '../src/db/dishModel';
 import { logCook, newMealId } from '../src/db/queries/cook';
 import { asSlot } from '../src/db/rows';
 import { useDishes } from '../src/hooks/useDishes';
@@ -177,13 +180,6 @@ function DishPicker({
 }
 
 // ---------------------------------------------------------------------------
-
-const SLOT_OPTIONS: readonly { value: Slot; label: string }[] = [
-  { value: 'breakfast', label: 'Breakfast' },
-  { value: 'lunch', label: 'Lunch' },
-  { value: 'dinner', label: 'Dinner' },
-  { value: 'snack', label: 'Snack' },
-];
 
 interface FormInput {
   slot: Slot;
