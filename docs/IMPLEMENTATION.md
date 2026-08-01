@@ -149,8 +149,8 @@ vantillu/
 │   ├── dish/[id].tsx             # detail: pattern stats, then recipe + timeline in Ph 7
 │   ├── dish/edit/[id].tsx        # add/edit dish + recipe
 │   ├── log.tsx                   # log sheet — one route, ?dishId skips the picker
-│   ├── debug.tsx                 # dev tools — dies with Phase 9
-│   └── onboarding.tsx
+│   └── debug.tsx                 # dev tools — dies with Phase 9
+│                                 # no onboarding route: Ph 8 made it a gate, see §18.4
 ├── src/
 │   ├── core/                     # PURE TS — no react, no react-native imports
 │   │   ├── interval.ts           # median interval, staleness ratio
@@ -166,9 +166,12 @@ vantillu/
 │   │   ├── todayModel.ts         # rows + `now` → Candidate/Context. No `db`, no clock.
 │   │   ├── dishesModel.ts        # rows + `now` → the repertoire list. No `db`, no clock.
 │   │   ├── cookModel.ts          # log sheet + `now` → a cook_event row. No `db`, no clock.
+│   │   ├── onboardingModel.ts    # picker + buckets → estimated events. No `db`, no clock.
+│   │   ├── seedCatalog.ts        # seed_dishes.json → dish rows. No `db`, no crypto.
 │   │   ├── settings.ts           # how setting values are read. No `db`.
-│   │   └── seed.ts
+│   │   └── seed.ts               # first-run role_config only, since Phase 8
 │   ├── components/
+│   ├── screens/                  # Onboarding — the one screen that is not a route
 │   ├── hooks/
 │   └── theme/tokens.ts
 ├── drizzle/                      # generated migrations — commit these
@@ -536,6 +539,44 @@ count went from one multiline input to four — mostly for `placeholderTextColor
 ### Phase 8 — onboarding
 Seed picker, then the last-cooked estimate buckets writing `isEstimated` events.
 **Done when:** a fresh install reaches a useful Today screen in under three minutes.
+
+**The seed stopped loading itself.** Phase 1's `seedDatabaseIfEmpty` inserted all sixty-eight
+dishes on first launch; the picker is only a picker if it runs *before* that. So `seed.ts` now
+seeds `role_config` alone — configuration, needed by every screen including the picker — and
+the dishes are inserted by `queries/onboarding.ts` from what the user ticked. SPEC §18.1 has
+the reasoning: suggestions and staleness are both claims about your own cooking, and forty
+dishes you have never made are forty dishes permanently overdue.
+
+**Everything starts ticked**, which is the seed file's own "accept what you cook, delete the
+rest". Untick, don't hunt.
+
+**The mapping moved to `src/db/seedCatalog.ts` and is now pure.** That was the enabling change
+rather than tidying: the picker needs to render the catalogue before any of it is in the
+database, and `__tests__/seedPipeline.test.ts` had been keeping a hand-copied duplicate of the
+mapping — the one test whose job is to catch seed drift was itself a second copy that could
+drift. It calls the real mapper now.
+
+**The estimate is three buckets and an unset default, and buys less than it looks like.**
+SPEC §18.2 states it plainly: an `isEstimated` event is excluded from interval maths, so three
+of them still produce no median, and an unknown median scores a neutral 1.0 — the suggestion
+*order* does not move. What it buys is honest day counts from day one and the
+recent-ingredient window working on the first morning. The `days` bucket resolves to 3 rather
+than 1, deliberately: the −4.0 ingredient penalty covers two calendar days, and a shrug must
+not be able to fire it.
+
+**Onboarding is a gate, not the `app/onboarding.tsx` route sketched in §3.** It renders in
+place of the `Stack`, beside the migration gate and the boot failure, because either there is
+a repertoire or there is not — a route would need a redirect that flashes Today first, or a
+navigator guard holding every other route out of reach. `useOnboardingGate` is live, so
+committing the writes is what dismisses it. It needs *both* the `onboardedAt` marker and an
+empty dish table, or the author's Phase-1 install would be asked to onboard and anyone who
+picked nothing would be asked forever (§18.4).
+
+`app/debug.tsx` grew a **Reset onboarding** button, for the same reason it grew the prep
+writers: this is the one flow whose acceptance criterion is a stopwatch, and without a reset
+there is no way to see it twice short of uninstalling. It hard-deletes, unlike every other
+delete in the app — a reset that left sixty-eight tombstones behind would not be the fresh
+install it claims to be.
 
 ### Phase 9 — prep notifications
 `expo-notifications`, local only. Schedule a nudge `prepLeadHours` before the dish's

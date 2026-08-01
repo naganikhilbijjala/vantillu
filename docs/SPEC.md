@@ -340,6 +340,12 @@ The loader also maps snake_case → camelCase and `0|1` → boolean, and remaps 
 `local_name` to `dish.altName`. Write it as an explicit typed mapper with a per-field
 assignment, not a spread — the shapes genuinely differ.
 
+Phase 8 moved that mapper into `src/db/seedCatalog.ts`, which imports neither `db` nor
+`expo-crypto`. It has three readers now — the onboarding picker, which renders the
+catalogue *before* any of it is in the database; the inserter; and the end-to-end seed
+test, which had been carrying a hand-copied duplicate of the mapping precisely because it
+could not import a module that pulls in a native one.
+
 ---
 
 ## 6. Veg-only days
@@ -928,3 +934,113 @@ intercepted, because a native swipe pops the screen with no chance to intervene.
   nothing reads or writes it, so it is the one dish field with no path to it. Adding it is one
   field in the editor and one quiet line under the method; it was left out of Phase 7 because
   the phase named three fields and this would be a fourth. A product decision, not a task.
+
+---
+
+## 18. Onboarding
+
+Added in Phase 8. The first ninety seconds, and the only screen most users will see exactly
+once. Its whole job is to get from an empty database to a Today screen worth reading.
+
+### 18.1 The seed is a starter list, not the repertoire
+
+Until Phase 8 the app inserted all sixty-eight seed dishes on first launch. It no longer
+does: **the user picks, and only the picked rows are ever written.**
+
+A repertoire nobody chose is a list of other people's cooking, and it poisons the two
+things the app is for. Suggestions come from it, so a dish you have never made can be the
+answer to "what should I cook now". And the staleness maths is a claim about *your*
+rhythm — forty dishes you do not cook are forty dishes permanently overdue.
+
+**Everything starts ticked.** The seed file's own note is "accept what you cook, delete the
+rest", and unticking is the faster answer for the common case: the list is curated for this
+household, so tapping Continue immediately is a plausible response, while sixty-eight empty
+boxes is a chore demanded before the app has shown anything. The rows are grouped by role,
+in `role_config` order and under `role_config` labels, each heading carrying an All / None
+control.
+
+Unpicked dishes are **not inserted and not tombstoned**. They were never yours, so there is
+nothing to soft-delete, and shipping forty tombstones out of a fresh install would put noise
+in the first export for nothing.
+
+There is currently **no path that adds a dish** — Phase 7 noted the same gap for the dish's
+identity fields — so the copy must not promise that unticked dishes can be fetched back
+later. It says what is true: only the ticked ones become your repertoire.
+
+### 18.2 The last-cooked estimate
+
+The second step asks, per picked dish, *when did you last make this?* — in three buckets,
+plus an unset fourth state that is the default:
+
+| Bucket | Recorded as |
+|---|---|
+| Days ago | 3 days before today |
+| Weeks ago | 21 days |
+| Months ago | 60 days |
+
+Each value is the **midpoint** of the phrase above it, not an edge. A date picker was
+rejected: nobody knows the answer to the day, and asking for a precision the user does not
+have stores a guess as though it were observed.
+
+Three notes on those numbers.
+
+- **`days` is 3, and that is load-bearing.** The −4.0 recent-ingredient penalty covers two
+  calendar days (§4.3). Putting the midpoint at 1 or 2 would let a shrug about last Tuesday
+  sink every toor dal dish on the morning of day one. A vague memory must not carry a
+  penalty that large.
+- **Each event is `isEstimated = true`**, so it counts toward `daysSince` and `cookCount`
+  and is excluded from interval maths (§3). Three estimates therefore still produce **no
+  median** — the rhythm has to come from cooks the user actually logged, and a bucketed
+  guess would set the number the entire engine then scores against.
+- **`cooked_at` is backdated; `created_at` is not.** The row was written today and says so,
+  or the export has no way to tell a guess apart from history. The event is filed under the
+  dish's first valid slot, at a plausible hour for it — 08:00, 13:00, 17:00, 20:00 — because
+  `cooked_at` is a full local datetime (§2.1) and midnight would read as the night before.
+
+**Nothing is required and the step is skippable.** Leaving every dish blank is a normal
+outcome; the app then knows nothing about your history, which is exactly what it knew
+before. So what the estimate actually buys is narrow and worth stating plainly: honest day
+counts on the repertoire list and the detail screen from day one, and the recent-ingredient
+and batch windows working on the first morning rather than the third. It does **not** change
+the suggestion order, because an unknown median scores a neutral 1.0 either way (§15.2).
+Overselling it would be the completion-meter mistake in another costume.
+
+### 18.3 What onboarding deliberately does not do
+
+- **It does not ask how often you make things.** A frequency bucket would produce a median,
+  which is the one number the interval maths refuses to invent (§3). The app is allowed to
+  say "no pattern yet" for three weeks.
+- **It does not ask for ratings**, per §7.1, or for recipes, or for anything that has a
+  perfectly good home on a screen the user will reach later. Onboarding is not the place to
+  collect the data the rest of the app exists to collect.
+- **It does not configure veg-only days.** Both settings default to off (§6) and the Today
+  screen exposes the override. A settings question in the first ninety seconds is a
+  question asked before it means anything.
+- **No completion meter, no progress bar over the dish list.** The step counter is
+  wayfinding — it says the flow is short — and that is the only count on either screen.
+
+### 18.4 It runs once, and it is a gate rather than a route
+
+Onboarding is needed when **the user has never been past it and owns no dishes**. Both
+halves are required. The marker alone would re-run it on an install that has carried the
+full seed since Phase 1 and was never asked anything; the dish count alone would re-run it
+on every launch, forever, for anyone who deliberately finished with nothing picked.
+
+The marker is a `setting` row, `onboardedAt`, written when the flow finishes — **including
+when it finishes with nothing picked**, since "picked nothing" and "has not been asked" are
+indistinguishable in the `dish` table. An install that predates Phase 8 has its marker
+backfilled on first launch rather than re-derived, so deleting every dish some day does not
+bring the flow back out of nowhere.
+
+It renders **in place of the navigator**, in the same position as the migration gate and the
+boot failure, rather than as the `app/onboarding.tsx` route sketched in
+`IMPLEMENTATION.md` §3. There is no version of this app in which you navigate to it: either
+there is a repertoire or there is not. A route would need either a redirect, which flashes
+Today first, or a navigator guard holding every other route out of reach while it is up. The
+gate is live, so committing the writes is what dismisses the screen — the same
+`useLiveQuery` mechanism every other screen already depends on.
+
+All of it — the dishes, their slots, the estimates, and the marker — lands in **one
+transaction**. It is the only place in the app that writes three tables at once, and a crash
+halfway would leave a repertoire with no slots, on the one screen the user cannot easily
+reach a second time.

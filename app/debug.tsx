@@ -1,8 +1,9 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackLink } from '../src/components/BackLink';
+import { resetOnboarding } from '../src/db/queries/onboarding';
 import { clearAllPrep, startPrep } from '../src/db/queries/prep';
 import { roleConfigQuery } from '../src/db/queries/roles';
 import { prepStatesQuery } from '../src/db/queries/tables';
@@ -97,6 +98,38 @@ export default function Debug() {
             : alwaysAvailable.map((r) => r.label).join(', ')}
           . Those are excluded from scoring by the flag, never by their name.
         </Text>
+
+        {/* Onboarding runs once and is a gate rather than a route, so without this there
+            is no way to see it a second time short of uninstalling the app — and it is
+            the one flow whose acceptance criterion is a stopwatch. */}
+        <Text style={styles.heading}>Onboarding</Text>
+        <Text style={styles.body}>
+          Wipes every dish, cook and setting and shows the picker again. A hard delete, so
+          it leaves the database exactly as a fresh install finds it. Roles survive — they
+          are seeded at boot.
+        </Text>
+        <View style={styles.buttons}>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+            onPress={() =>
+              Alert.alert(
+                'Start over?',
+                'Every dish, cook event and setting is deleted. There is no undo.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Delete everything',
+                    style: 'destructive',
+                    onPress: () => resetOnboarding(),
+                  },
+                ],
+              )
+            }
+          >
+            <Text style={styles.buttonLabel}>Reset onboarding</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

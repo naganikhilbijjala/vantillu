@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import seedFile from '../assets/seed_dishes.json';
 import { buildSuggestions } from '../src/core/scoring';
 import { localDateKey } from '../src/core/slots';
 import type { Slot } from '../src/core/types';
@@ -11,8 +10,17 @@ import {
   sortByStaleness,
   usedRoles,
 } from '../src/db/dishesModel';
+import {
+  defaultSelection,
+  groupCatalogByRole,
+  type LastCookedBucket,
+  selectedEntries,
+  toEstimatedCookEventRow,
+  toggleKey,
+} from '../src/db/onboardingModel';
 import { DEFAULT_ROLES } from '../src/db/roles';
 import type { CookEventRow, DishRow, DishSlotRow, PrepStateRow } from '../src/db/rows';
+import { SEED_CATALOG, toDishRow, toDishSlotRows } from '../src/db/seedCatalog';
 import { toSettingMap } from '../src/db/settings';
 import { toLocalIso } from '../src/db/time';
 import { buildTodayModel } from '../src/db/todayModel';
@@ -26,59 +34,21 @@ import { day } from './fixtures';
  * drifted — a seed role renamed, a prep pair that no longer matches — and the only symptom
  * would be a Today screen that quietly suggests the wrong things.
  *
- * It mirrors the mapping in `src/db/seed.ts` rather than calling it, because that module
- * imports `expo-crypto` and the database.
+ * It calls the **real** mapper. Until Phase 8 it could not: the mapping lived in
+ * `src/db/seed.ts` next to a `db` import, so this file kept a hand-copied duplicate of it —
+ * which is to say the one test whose job is to catch drift was itself a second copy that
+ * could drift. `seedCatalog.ts` is pure precisely so that is no longer true.
  */
 
-const SEED_PREP: Record<string, { kind: string | null; label: string | null }> = {
-  none: { kind: null, label: null },
-  soak_overnight: { kind: 'soaked', label: 'soak overnight' },
-  ferment: { kind: 'batter', label: 'grind and ferment' },
-};
+const SEED = SEED_CATALOG;
+const SEEDED_AT = '2026-07-27T09:00:00';
 
-interface SeedDish {
-  name: string;
-  local_name: string | null;
-  role: string;
-  primary_ingredient: string | null;
-  effort: string;
-  minutes: number | null;
-  is_veg: number;
-  prep: string;
-  slots: string[];
-  season?: string | null;
-  uses_leftover_rice?: number;
-}
-
-const SEED = (seedFile as unknown as { dishes: SeedDish[] }).dishes;
-
-const dishes: DishRow[] = [];
-const dishSlots: DishSlotRow[] = [];
-
-SEED.forEach((seed, index) => {
-  const id = `seed-${index}`;
-  const prep = SEED_PREP[seed.prep];
-  dishes.push({
-    id,
-    name: seed.name,
-    altName: seed.local_name ?? null,
-    role: seed.role,
-    primaryIngredient: seed.primary_ingredient ?? null,
-    effort: seed.effort,
-    minutes: seed.minutes ?? null,
-    isVeg: seed.is_veg === 1,
-    prepKind: prep.kind,
-    prepLabel: prep.label,
-    usesLeftoverRice: seed.uses_leftover_rice === 1,
-    season: seed.season ?? null,
-    ingredientsText: null,
-    methodText: null,
-    notes: null,
-    isArchived: false,
-    createdAt: '2026-07-27T09:00:00',
-  });
-  for (const slot of seed.slots) dishSlots.push({ dishId: id, slot });
-});
+const dishes: DishRow[] = SEED.map((entry, index) =>
+  toDishRow(entry, `seed-${index}`, SEEDED_AT),
+);
+const dishSlots: DishSlotRow[] = SEED.flatMap((entry, index) =>
+  toDishSlotRows(entry, `seed-${index}`, SEEDED_AT),
+);
 
 const roles = DEFAULT_ROLES.map((role, sortOrder) => ({ ...role, sortOrder }));
 
@@ -115,6 +85,13 @@ const ALWAYS_AVAILABLE_ROLES = DEFAULT_ROLES.filter((r) => r.isAlwaysAvailable).
 // ---------------------------------------------------------------------------
 
 describe('the seeded repertoire', () => {
+  it('gives every dish a unique key for the onboarding picker to tick', () => {
+    // The picker's selection is a set of these. Two dishes sharing one would tick and
+    // untick together, and the collision would be invisible until someone noticed a dish
+    // they never picked in their repertoire.
+    expect(new Set(SEED.map((entry) => entry.key)).size).toBe(SEED.length);
+  });
+
   it('maps cleanly — every seed row lands as a candidate with at least one slot', () => {
     const { model } = today('lunch');
     expect(model.candidates).toHaveLength(SEED.length);
@@ -271,8 +248,8 @@ describe('the repertoire list, against the real seed', () => {
   });
 
   it('reads as all-new before any history exists, in name order', () => {
-    // The state a fresh install is actually in: nothing cooked, so nothing has a rhythm
-    // and the name tiebreak is the entire order. Phase 8's estimates change this.
+    // The state onboarding leaves behind when nobody fills in an estimate: nothing cooked,
+    // so nothing has a rhythm and the name tiebreak is the entire order.
     const items = repertoire();
     const normal = items.filter((i) => !i.isAlwaysAvailable);
 
@@ -405,5 +382,200 @@ describe('logging a cook, read back', () => {
     // And the rice staple boost fires, which is the whole reason `staple` is its own role.
     const { model } = todayWith(events, 'dinner');
     expect(model.ctx.hadRiceStapleInLast24h).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Onboarding (Phase 8)
+// ---------------------------------------------------------------------------
+
+/**
+ * The phase's acceptance criterion is a stopwatch — "a fresh install reaches a useful Today
+ * screen in under three minutes" — and the part of that a test can hold is *useful*: the
+ * rows onboarding writes have to arrive at the same two screen models as everything else,
+ * and the estimates have to stay guesses all the way through.
+ */
+function onboarded(
+  keys: readonly string[],
+  estimates: Readonly<Record<string, LastCookedBucket>> = {},
+  now = MONDAY,
+) {
+  const entries = selectedEntries(SEED_CATALOG, new Set(keys));
+  const at = toLocalIso(now);
+
+  const pickedDishes: DishRow[] = [];
+  const pickedSlots: DishSlotRow[] = [];
+  const cookEvents: CookEventRow[] = [];
+
+  entries.forEach((entry, index) => {
+    const id = `picked-${index}`;
+    pickedDishes.push(toDishRow(entry, id, at));
+    pickedSlots.push(...toDishSlotRows(entry, id, at));
+
+    const bucket = estimates[entry.key];
+    if (bucket !== undefined) {
+      cookEvents.push(
+        toEstimatedCookEventRow(
+          { dishId: id, slots: entry.slots, bucket },
+          `estimate-${index}`,
+          now,
+        ),
+      );
+    }
+  });
+
+  return { entries, dishes: pickedDishes, dishSlots: pickedSlots, cookEvents };
+}
+
+describe('onboarding, from an empty database', () => {
+  it('groups the whole catalogue under role_config labels, in role_config order', () => {
+    const sections = groupCatalogByRole(SEED_CATALOG, roles);
+
+    expect(sections.flatMap((s) => s.entries)).toHaveLength(SEED.length);
+    expect(sections.map((s) => s.label)).toEqual(roles.map((r) => r.label));
+    // Never the raw role string: a renamed role has to show its new name here too.
+    expect(sections.every((s) => s.label !== s.role)).toBe(true);
+  });
+
+  it('starts with everything ticked, and unticking removes exactly that dish', () => {
+    const all = defaultSelection(SEED_CATALOG);
+    expect(all.size).toBe(SEED.length);
+
+    const without = toggleKey(all, 'Bobbatlu');
+    expect(selectedEntries(SEED_CATALOG, without)).toHaveLength(SEED.length - 1);
+    expect(
+      selectedEntries(SEED_CATALOG, without).some((e) => e.name === 'Bobbatlu'),
+    ).toBe(false);
+  });
+
+  it('builds a repertoire of exactly what was picked, and suggests only from it', () => {
+    const picked = ['Plain rice', 'Tomato pappu', 'Sambar', 'Gongura pachadi'];
+    const { dishes: mine, dishSlots: mySlots, cookEvents } = onboarded(picked);
+
+    const items = buildDishList(
+      { dishes: mine, dishSlots: mySlots, roles, cookEvents },
+      MONDAY,
+    );
+    expect(items.map((i) => i.name).sort()).toEqual([...picked].sort());
+
+    const model = buildTodayModel(
+      {
+        dishes: mine,
+        dishSlots: mySlots,
+        roles,
+        cookEvents,
+        prepStates: [],
+        settings: toSettingMap([]),
+      },
+      MONDAY,
+      'lunch',
+    );
+    const { suggestions } = buildSuggestions(
+      model.candidates,
+      model.ctx,
+      localDateKey(MONDAY),
+    );
+
+    expect(suggestions.length).toBeGreaterThan(0);
+    // The point of the picker: nothing the user did not tick can ever be offered.
+    expect(suggestions.every((s) => picked.includes(s.candidate.name))).toBe(true);
+    // Still every suggestion states a reason, on day one with no history (SPEC §4.6).
+    expect(suggestions.every((s) => s.reasons.length > 0)).toBe(true);
+  });
+
+  it('turns a bucket into days since, without inventing a rhythm', () => {
+    const {
+      dishes: mine,
+      dishSlots: mySlots,
+      cookEvents,
+    } = onboarded(['Sambar', 'Plain rice', 'Bobbatlu'], {
+      Sambar: 'days',
+      'Plain rice': 'weeks',
+      Bobbatlu: 'months',
+    });
+
+    const byName = new Map(
+      buildDishList({ dishes: mine, dishSlots: mySlots, roles, cookEvents }, MONDAY).map(
+        (item) => [item.name, item],
+      ),
+    );
+
+    expect(byName.get('Sambar')?.daysSince).toBe(3);
+    expect(byName.get('Plain rice')?.daysSince).toBe(21);
+    expect(byName.get('Bobbatlu')?.daysSince).toBe(60);
+
+    for (const name of ['Sambar', 'Plain rice', 'Bobbatlu']) {
+      const item = byName.get(name);
+      // Counted as a cook, but the rhythm stays unknown — one guess is not a pattern, and
+      // "new dish" is the honest render (SPEC §3).
+      expect(item?.cookCount).toBe(1);
+      expect(item?.medianInterval).toBeNull();
+      expect(item?.stalenessState).toBe('new');
+    }
+  });
+
+  it('never lets estimates add up to a median, however many there are', () => {
+    // Three events is normally enough for a rhythm. Three *estimates* must not be, or a
+    // bucketed guess would set the interval the whole app then scores against.
+    const { dishes: mine, dishSlots: mySlots } = onboarded(['Sambar']);
+    const id = mine[0].id;
+
+    const estimated: CookEventRow[] = [60, 21, 3].map((daysAgo) => ({
+      dishId: id,
+      cookedAt: toLocalIso(day(2026, 7, 27 - daysAgo, 20)),
+      rating: null,
+      isBatch: false,
+      isEstimated: true,
+    }));
+    const real = estimated.map((event) => ({ ...event, isEstimated: false }));
+
+    const median = (cookEvents: CookEventRow[]) =>
+      buildDishList({ dishes: mine, dishSlots: mySlots, roles, cookEvents }, MONDAY)[0]
+        .medianInterval;
+
+    expect(median(estimated)).toBeNull();
+    expect(median(real)).not.toBeNull();
+  });
+
+  it('keeps the freshest bucket clear of the recent-ingredient penalty', () => {
+    // "Days ago" is a shrug, and the −4.0 penalty covers two calendar days (SPEC §4.3).
+    // A guess must not be able to sink every toor dal dish on the morning of day one.
+    const {
+      dishes: mine,
+      dishSlots: mySlots,
+      cookEvents,
+    } = onboarded(['Sambar', 'Muddha pappu'], { Sambar: 'days' });
+
+    const model = buildTodayModel(
+      {
+        dishes: mine,
+        dishSlots: mySlots,
+        roles,
+        cookEvents,
+        prepStates: [],
+        settings: toSettingMap([]),
+      },
+      MONDAY,
+      'lunch',
+    );
+
+    expect(cookEvents).toHaveLength(1);
+    expect(model.ctx.recentIngredients).toEqual([]);
+  });
+
+  it('files each estimate at an hour that matches its slot', () => {
+    // `cooked_at` is a full local datetime and an estimate still has to fill one in.
+    // Midnight would read as the night before to anything that groups by time of day.
+    const breakfast = toEstimatedCookEventRow(
+      { dishId: 'd1', slots: ['breakfast', 'dinner'], bucket: 'days' },
+      'e1',
+      MONDAY,
+    );
+    expect(breakfast.cookedAt).toBe('2026-07-24T08:00:00');
+    expect(breakfast.slot).toBe('breakfast');
+    // Written now, cooked then — or the export cannot tell a guess from history.
+    expect(breakfast.createdAt).toBe(toLocalIso(MONDAY));
+    expect(breakfast.isEstimated).toBe(true);
+    expect(breakfast.rating).toBeNull();
   });
 });

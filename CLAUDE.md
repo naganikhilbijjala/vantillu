@@ -27,8 +27,10 @@ anything on iOS.
    `src/db/queries/` instead.
    `src/db/` is split the same way one level down: **`src/db/queries/` imports `db`;
    modules at the `src/db/` root do not** (`time.ts`, `roles.ts`, `rows.ts`, `settings.ts`,
-   `todayModel.ts`, `dishesModel.ts`, `cookModel.ts`, `dishModel.ts`).
-   Row-shaping and window logic go in the latter, so
+   `seedCatalog.ts`, `todayModel.ts`, `dishesModel.ts`, `cookModel.ts`, `dishModel.ts`,
+   `onboardingModel.ts`). `client.ts` and `seed.ts` are the two exceptions, and both exist
+   to *set the database up* rather than to shape a row.
+   Row-shaping and window logic go in the pure modules, so
    they can be unit tested in Node. Never read the clock in either — take `now` as an
    argument. One screen model per screen; shared row shapes and TEXT→union narrowing live
    in `rows.ts` so two models can't disagree about what a bad value means.
@@ -49,6 +51,11 @@ anything on iOS.
 Dishes have a **role**: `staple`, `tiffin`, `dal`, `dry_curry`, `gravy`, `one_pot`,
 `pachadi`, `podi`, `accompaniment`, `snack`, `sweet`. `role` is unconstrained TEXT —
 seeded with defaults, editable later. Don't add a CHECK constraint.
+
+**`assets/seed_dishes.json` is a starter list the user picks from in onboarding, not the
+repertoire.** Only ticked dishes are ever inserted; boot seeds `role_config` and nothing
+else (`docs/SPEC.md` §18.1). Never reinstate a "load every seed dish on first run" path —
+suggestions and staleness are both claims about the user's own cooking.
 
 - `staple` (plain rice, chapati) and `one_pot` (pulihora, biryani) are **distinct roles**.
   Don't merge them into a `rice` role — the leftover-rice boost fires from `staple` and
