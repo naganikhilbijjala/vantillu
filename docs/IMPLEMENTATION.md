@@ -537,32 +537,37 @@ count went from one multiline input to four — mostly for `placeholderTextColor
 `TextInput` otherwise defaults to a grey that disappears against a dark surface.
 
 ### Phase 8 — onboarding
-Seed picker, then the last-cooked estimate buckets writing `isEstimated` events.
+An intro that explains the app, then an optional starter list.
 **Done when:** a fresh install reaches a useful Today screen in under three minutes.
 
-**The seed stopped loading itself.** Phase 1's `seedDatabaseIfEmpty` inserted all sixty-eight
-dishes on first launch; the picker is only a picker if it runs *before* that. So `seed.ts` now
-seeds `role_config` alone — configuration, needed by every screen including the picker — and
-the dishes are inserted by `queries/onboarding.ts` from what the user ticked. SPEC §18.1 has
-the reasoning: suggestions and staleness are both claims about your own cooking, and forty
-dishes you have never made are forty dishes permanently overdue.
+**The line above is not what this phase originally said**, and the difference is the phase's
+main lesson. It read "seed picker, then the last-cooked estimate buckets writing `isEstimated`
+events" — both of which got built and then cut on the author's reading of the result. SPEC §18
+is authoritative; the short version is that onboarding's job is **to explain the app**, and
+both of those turned it into a data-entry chore standing between someone and the thing they
+just installed.
 
-**Everything starts ticked**, which is the seed file's own "accept what you cook, delete the
-rest". Untick, don't hunt.
+**The seed stopped loading itself.** Phase 1's `seedDatabaseIfEmpty` inserted all sixty-eight
+dishes on first launch. So `seed.ts` now seeds `role_config` alone — configuration, needed by
+every screen — and dishes are inserted by `queries/onboarding.ts` from what the user ticked.
+
+**Then the pre-ticking went too.** The first version offered the list with everything ticked,
+to untick from. Quieter than Phase 1 and the same mistake: tapping Continue is what most
+people do, so the default *is* the outcome, and the default was a stranger's repertoire. It is
+now offered with **nothing ticked**, clearly optional, and skipping it is the expected path —
+dishes are added by hand from the Dishes tab, which is what §19 exists for.
+
+**And the estimate buckets went.** They asked, per dish, roughly when you last cooked it, and
+wrote an `isEstimated` event. The honest accounting was already thin — those events are
+excluded from interval maths, so no number of them makes a median, and an unknown median
+scores a neutral 1.0, so the suggestion order never moved. `is_estimated` stays in the schema
+and stays excluded from the median; nothing writes one now (SPEC §18.3).
 
 **The mapping moved to `src/db/seedCatalog.ts` and is now pure.** That was the enabling change
-rather than tidying: the picker needs to render the catalogue before any of it is in the
+rather than tidying: the starter list renders the catalogue before any of it is in the
 database, and `__tests__/seedPipeline.test.ts` had been keeping a hand-copied duplicate of the
 mapping — the one test whose job is to catch seed drift was itself a second copy that could
 drift. It calls the real mapper now.
-
-**The estimate is three buckets and an unset default, and buys less than it looks like.**
-SPEC §18.2 states it plainly: an `isEstimated` event is excluded from interval maths, so three
-of them still produce no median, and an unknown median scores a neutral 1.0 — the suggestion
-*order* does not move. What it buys is honest day counts from day one and the
-recent-ingredient window working on the first morning. The `days` bucket resolves to 3 rather
-than 1, deliberately: the −4.0 ingredient penalty covers two calendar days, and a shrug must
-not be able to fire it.
 
 **Onboarding is a gate, not the `app/onboarding.tsx` route sketched in §3.** It renders in
 place of the `Stack`, beside the migration gate and the boot failure, because either there is
@@ -580,8 +585,9 @@ install it claims to be.
 
 **Adding a dish had to follow immediately, in the same session.** Phase 7 recorded that the
 dish's identity was not editable and that nothing *added* a dish; that was survivable while
-first launch inserted all sixty-eight. Once the seed became a list you pick from, it was not:
-an unticked dish, or one the seed never had, had no way into the repertoire at all. So
+first launch inserted all sixty-eight. Once the seed became a list you pick from it was not,
+and once the list stopped being pre-ticked the editor became the **primary** way a repertoire
+gets built rather than a fallback. So
 `dish/edit/[id].tsx` widened to the "add/edit dish + recipe" that §3 always sketched, with
 `id = new` for a dish that does not exist yet. SPEC §19 has the field list and the two
 required fields; the short version is that a dish with no meal slot fails a *silent*

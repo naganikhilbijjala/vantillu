@@ -10,14 +10,7 @@ import {
   sortByStaleness,
   usedRoles,
 } from '../src/db/dishesModel';
-import {
-  defaultSelection,
-  groupCatalogByRole,
-  type LastCookedBucket,
-  selectedEntries,
-  toEstimatedCookEventRow,
-  toggleKey,
-} from '../src/db/onboardingModel';
+import { groupCatalogByRole, selectedEntries } from '../src/db/onboardingModel';
 import { DEFAULT_ROLES } from '../src/db/roles';
 import type { CookEventRow, DishRow, DishSlotRow, PrepStateRow } from '../src/db/rows';
 import { SEED_CATALOG, toDishRow, toDishSlotRows } from '../src/db/seedCatalog';
@@ -390,41 +383,24 @@ describe('logging a cook, read back', () => {
 // ---------------------------------------------------------------------------
 
 /**
- * The phase's acceptance criterion is a stopwatch — "a fresh install reaches a useful Today
- * screen in under three minutes" — and the part of that a test can hold is *useful*: the
- * rows onboarding writes have to arrive at the same two screen models as everything else,
- * and the estimates have to stay guesses all the way through.
+ * Onboarding explains the app and then offers the seed as an optional shortcut. What a test
+ * can hold of that is the shortcut: whatever comes out of the picker has to arrive at the
+ * same two screen models as everything else, and nothing outside it may.
  */
-function onboarded(
-  keys: readonly string[],
-  estimates: Readonly<Record<string, LastCookedBucket>> = {},
-  now = MONDAY,
-) {
+function onboarded(keys: readonly string[], now = MONDAY) {
   const entries = selectedEntries(SEED_CATALOG, new Set(keys));
   const at = toLocalIso(now);
 
   const pickedDishes: DishRow[] = [];
   const pickedSlots: DishSlotRow[] = [];
-  const cookEvents: CookEventRow[] = [];
 
   entries.forEach((entry, index) => {
     const id = `picked-${index}`;
     pickedDishes.push(toDishRow(entry, id, at));
     pickedSlots.push(...toDishSlotRows(entry, id, at));
-
-    const bucket = estimates[entry.key];
-    if (bucket !== undefined) {
-      cookEvents.push(
-        toEstimatedCookEventRow(
-          { dishId: id, slots: entry.slots, bucket },
-          `estimate-${index}`,
-          now,
-        ),
-      );
-    }
   });
 
-  return { entries, dishes: pickedDishes, dishSlots: pickedSlots, cookEvents };
+  return { entries, dishes: pickedDishes, dishSlots: pickedSlots };
 }
 
 describe('onboarding, from an empty database', () => {
@@ -437,23 +413,22 @@ describe('onboarding, from an empty database', () => {
     expect(sections.every((s) => s.label !== s.role)).toBe(true);
   });
 
-  it('starts with everything ticked, and unticking removes exactly that dish', () => {
-    const all = defaultSelection(SEED_CATALOG);
-    expect(all.size).toBe(SEED.length);
+  it('takes nothing from the starter list unless it was ticked', () => {
+    // The seed is a suggestion list, not the repertoire (SPEC §18.1). Skipping the step
+    // has to leave a genuinely empty app, or the app has decided what you cook for you.
+    expect(onboarded([]).dishes).toEqual([]);
 
-    const without = toggleKey(all, 'Bobbatlu');
-    expect(selectedEntries(SEED_CATALOG, without)).toHaveLength(SEED.length - 1);
-    expect(
-      selectedEntries(SEED_CATALOG, without).some((e) => e.name === 'Bobbatlu'),
-    ).toBe(false);
+    const one = onboarded(['Bobbatlu']);
+    expect(one.dishes.map((d) => d.name)).toEqual(['Bobbatlu']);
+    expect(one.dishSlots.length).toBeGreaterThan(0);
   });
 
   it('builds a repertoire of exactly what was picked, and suggests only from it', () => {
     const picked = ['Plain rice', 'Tomato pappu', 'Sambar', 'Gongura pachadi'];
-    const { dishes: mine, dishSlots: mySlots, cookEvents } = onboarded(picked);
+    const { dishes: mine, dishSlots: mySlots } = onboarded(picked);
 
     const items = buildDishList(
-      { dishes: mine, dishSlots: mySlots, roles, cookEvents },
+      { dishes: mine, dishSlots: mySlots, roles, cookEvents: [] },
       MONDAY,
     );
     expect(items.map((i) => i.name).sort()).toEqual([...picked].sort());
@@ -463,7 +438,7 @@ describe('onboarding, from an empty database', () => {
         dishes: mine,
         dishSlots: mySlots,
         roles,
-        cookEvents,
+        cookEvents: [],
         prepStates: [],
         settings: toSettingMap([]),
       },
@@ -483,40 +458,25 @@ describe('onboarding, from an empty database', () => {
     expect(suggestions.every((s) => s.reasons.length > 0)).toBe(true);
   });
 
-  it('turns a bucket into days since, without inventing a rhythm', () => {
-    const {
-      dishes: mine,
-      dishSlots: mySlots,
-      cookEvents,
-    } = onboarded(['Sambar', 'Plain rice', 'Bobbatlu'], {
-      Sambar: 'days',
-      'Plain rice': 'weeks',
-      Bobbatlu: 'months',
-    });
-
-    const byName = new Map(
-      buildDishList({ dishes: mine, dishSlots: mySlots, roles, cookEvents }, MONDAY).map(
-        (item) => [item.name, item],
-      ),
+  it('writes no history at all, so every dish reads as never cooked', () => {
+    // Onboarding used to collect a last-cooked bucket per dish and write `isEstimated`
+    // events from it. It does not any more (SPEC §18.3) — the app starts out knowing
+    // nothing about your cooking and says so, which is the truth.
+    const { dishes: mine, dishSlots: mySlots } = onboarded(['Sambar', 'Plain rice']);
+    const items = buildDishList(
+      { dishes: mine, dishSlots: mySlots, roles, cookEvents: [] },
+      MONDAY,
     );
 
-    expect(byName.get('Sambar')?.daysSince).toBe(3);
-    expect(byName.get('Plain rice')?.daysSince).toBe(21);
-    expect(byName.get('Bobbatlu')?.daysSince).toBe(60);
-
-    for (const name of ['Sambar', 'Plain rice', 'Bobbatlu']) {
-      const item = byName.get(name);
-      // Counted as a cook, but the rhythm stays unknown — one guess is not a pattern, and
-      // "new dish" is the honest render (SPEC §3).
-      expect(item?.cookCount).toBe(1);
-      expect(item?.medianInterval).toBeNull();
-      expect(item?.stalenessState).toBe('new');
-    }
+    expect(items.every((i) => i.cookCount === 0)).toBe(true);
+    expect(items.every((i) => i.daysSince === null)).toBe(true);
+    expect(items.every((i) => i.medianInterval === null)).toBe(true);
+    expect(items.every((i) => i.stalenessState === 'new')).toBe(true);
   });
 
-  it('never lets estimates add up to a median, however many there are', () => {
-    // Three events is normally enough for a rhythm. Three *estimates* must not be, or a
-    // bucketed guess would set the interval the whole app then scores against.
+  it('still excludes an estimated event from the median if one ever arrives', () => {
+    // Nothing writes these now, but the column and the rule stay: a Phase 10 import can
+    // carry them, and the exclusion is what stops a guess setting a dish's rhythm (SPEC §3).
     const { dishes: mine, dishSlots: mySlots } = onboarded(['Sambar']);
     const id = mine[0].id;
 
@@ -535,47 +495,5 @@ describe('onboarding, from an empty database', () => {
 
     expect(median(estimated)).toBeNull();
     expect(median(real)).not.toBeNull();
-  });
-
-  it('keeps the freshest bucket clear of the recent-ingredient penalty', () => {
-    // "Days ago" is a shrug, and the −4.0 penalty covers two calendar days (SPEC §4.3).
-    // A guess must not be able to sink every toor dal dish on the morning of day one.
-    const {
-      dishes: mine,
-      dishSlots: mySlots,
-      cookEvents,
-    } = onboarded(['Sambar', 'Muddha pappu'], { Sambar: 'days' });
-
-    const model = buildTodayModel(
-      {
-        dishes: mine,
-        dishSlots: mySlots,
-        roles,
-        cookEvents,
-        prepStates: [],
-        settings: toSettingMap([]),
-      },
-      MONDAY,
-      'lunch',
-    );
-
-    expect(cookEvents).toHaveLength(1);
-    expect(model.ctx.recentIngredients).toEqual([]);
-  });
-
-  it('files each estimate at an hour that matches its slot', () => {
-    // `cooked_at` is a full local datetime and an estimate still has to fill one in.
-    // Midnight would read as the night before to anything that groups by time of day.
-    const breakfast = toEstimatedCookEventRow(
-      { dishId: 'd1', slots: ['breakfast', 'dinner'], bucket: 'days' },
-      'e1',
-      MONDAY,
-    );
-    expect(breakfast.cookedAt).toBe('2026-07-24T08:00:00');
-    expect(breakfast.slot).toBe('breakfast');
-    // Written now, cooked then — or the export cannot tell a guess from history.
-    expect(breakfast.createdAt).toBe(toLocalIso(MONDAY));
-    expect(breakfast.isEstimated).toBe(true);
-    expect(breakfast.rating).toBeNull();
   });
 });

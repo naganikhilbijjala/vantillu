@@ -1,9 +1,6 @@
 import { count, isNull } from 'drizzle-orm';
 import { randomUUID } from 'expo-crypto';
 import { db } from '../client';
-import type { NewCookEventRow } from '../cookModel';
-import type { LastCookedBucket } from '../onboardingModel';
-import { toEstimatedCookEventRow } from '../onboardingModel';
 import type { NewDishRow, NewDishSlotRow } from '../rows';
 import { cookEvent, dish, dishSlot, setting } from '../schema';
 import { type SeedCatalogEntry, toDishRow, toDishSlotRows } from '../seedCatalog';
@@ -13,13 +10,12 @@ import { toLocalIso } from '../time';
 /**
  * The writes onboarding makes, and the read that decides whether it runs at all.
  *
- * All of it lands in **one transaction**. Onboarding is the only place in the app that
- * writes three tables at once, and a crash halfway through would leave a repertoire with
- * no slots or estimates pointing at dishes that were rolled back — a state nothing else
- * could diagnose, on the one screen the user cannot easily reach again.
+ * All of it lands in **one transaction**. A crash halfway would leave dishes with no slots
+ * — which is not a half-saved dish but an invisible one, since a dish with no slot fails a
+ * silent eligibility filter forever (`docs/SPEC.md` §4.1).
  *
- * How the rows are *shaped* is in `seedCatalog.ts` and `onboardingModel.ts`, both of which
- * are pure and tested. This module is the part that needs a database.
+ * How the rows are *shaped* is in `seedCatalog.ts`, which is pure and tested. This module
+ * is the part that needs a database.
  */
 
 /**
@@ -73,29 +69,24 @@ export function markOnboarded(now = new Date()): void {
 // Finishing
 // ---------------------------------------------------------------------------
 
-export interface OnboardingChoice {
-  /** The picked catalogue entries, in catalogue order. */
-  entries: readonly SeedCatalogEntry[];
-  /** Bucket per catalogue key. Absent means "didn't say", which writes nothing. */
-  estimates: ReadonlyMap<string, LastCookedBucket>;
-}
-
 export interface OnboardingResult {
   dishesInserted: number;
   slotsInserted: number;
-  estimatesInserted: number;
 }
 
 /**
- * Inserts the chosen dishes, their slots, and one estimated cook event per dish the user
- * put a bucket against — then marks onboarding done.
+ * Inserts whatever was taken from the starter list, then marks onboarding done.
  *
- * **The marker is written even when nothing was picked.** "Picked nothing" and "has not
- * been asked" are indistinguishable in the `dish` table, and without the marker a user who
- * skipped would be asked again on every launch, which is the definition of nagging.
+ * **The marker is written even when nothing was picked**, which is the common case now
+ * that the list is a shortcut rather than the repertoire. "Picked nothing" and "has not
+ * been asked" are indistinguishable in the `dish` table, and without the marker anyone who
+ * intends to type their own dishes in would be shown the intro again on every launch.
+ *
+ * No cook events. Onboarding writes no history at all — the app starts out knowing nothing
+ * about what you cook, and says so, which is the truth (SPEC §18.3).
  */
 export function finishOnboarding(
-  choice: OnboardingChoice,
+  entries: readonly SeedCatalogEntry[],
   now = new Date(),
 ): OnboardingResult {
   const timestamp = toLocalIso(now);
@@ -103,23 +94,11 @@ export function finishOnboarding(
   return db.transaction((tx) => {
     const dishRows: NewDishRow[] = [];
     const slotRows: NewDishSlotRow[] = [];
-    const eventRows: NewCookEventRow[] = [];
 
-    for (const entry of choice.entries) {
+    for (const entry of entries) {
       const id = randomUUID();
       dishRows.push(toDishRow(entry, id, timestamp));
       slotRows.push(...toDishSlotRows(entry, id, timestamp));
-
-      const bucket = choice.estimates.get(entry.key);
-      if (bucket !== undefined) {
-        eventRows.push(
-          toEstimatedCookEventRow(
-            { dishId: id, slots: entry.slots, bucket },
-            randomUUID(),
-            now,
-          ),
-        );
-      }
     }
 
     for (const part of chunk(dishRows, Math.floor(MAX_BOUND_PARAMETERS / 22))) {
@@ -128,20 +107,13 @@ export function finishOnboarding(
     for (const part of chunk(slotRows, Math.floor(MAX_BOUND_PARAMETERS / 5))) {
       tx.insert(dishSlot).values(part).run();
     }
-    for (const part of chunk(eventRows, Math.floor(MAX_BOUND_PARAMETERS / 13))) {
-      tx.insert(cookEvent).values(part).run();
-    }
 
     tx.insert(setting)
       .values(markerRow(timestamp))
       .onConflictDoUpdate(markerConflict(timestamp))
       .run();
 
-    return {
-      dishesInserted: dishRows.length,
-      slotsInserted: slotRows.length,
-      estimatesInserted: eventRows.length,
-    };
+    return { dishesInserted: dishRows.length, slotsInserted: slotRows.length };
   });
 }
 

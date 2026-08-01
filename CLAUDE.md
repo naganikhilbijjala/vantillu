@@ -52,10 +52,18 @@ Dishes have a **role**: `staple`, `tiffin`, `dal`, `dry_curry`, `gravy`, `one_po
 `pachadi`, `podi`, `accompaniment`, `snack`, `sweet`. `role` is unconstrained TEXT —
 seeded with defaults, editable later. Don't add a CHECK constraint.
 
-**`assets/seed_dishes.json` is a starter list the user picks from in onboarding, not the
-repertoire.** Only ticked dishes are ever inserted; boot seeds `role_config` and nothing
-else (`docs/SPEC.md` §18.1). Never reinstate a "load every seed dish on first run" path —
-suggestions and staleness are both claims about the user's own cooking.
+**The repertoire is what the user adds. `assets/seed_dishes.json` is a suggestion list
+offered once in onboarding, with nothing pre-ticked** (`docs/SPEC.md` §18.1). Boot seeds
+`role_config` and nothing else. Two versions of "helpfully fill the repertoire" have been
+reverted — loading every seed dish on first run, and pre-ticking them all — so don't
+reinstate either: suggestions and staleness are both claims about the user's *own* cooking,
+and a default that most people accept is the outcome, not a suggestion. Dishes normally
+arrive one at a time from the Dishes tab.
+
+**Onboarding explains the app; it does not collect data** (§18.2, §18.3). It asks nothing
+about cooking history — no last-cooked estimate, no frequency. Nothing writes
+`cook_event.is_estimated` any more, though the column and its exclusion from the median stay
+for imports.
 
 - `staple` (plain rice, chapati) and `one_pot` (pulihora, biryani) are **distinct roles**.
   Don't merge them into a `rice` role — the leftover-rice boost fires from `staple` and

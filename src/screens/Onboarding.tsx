@@ -1,22 +1,23 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { Check } from 'lucide-react-native';
+import {
+  Check,
+  CookingPot,
+  type LucideIcon,
+  PencilLine,
+  Smartphone,
+  TrendingUp,
+} from 'lucide-react-native';
 import { type ReactNode, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GhostButton } from '../components/GhostButton';
-import { PillToggle } from '../components/PillToggle';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { SmallButton } from '../components/SmallButton';
 import {
   type CatalogSection,
-  defaultSelection,
   groupCatalogByRole,
   isSectionFull,
-  LAST_COOKED_OPTIONS,
-  type LastCookedBucket,
-  pruneEstimates,
   selectedEntries,
-  setBucket,
   setSectionKeys,
   toggleKey,
 } from '../db/onboardingModel';
@@ -28,43 +29,44 @@ import { border, layout, radius, space, type Theme } from '../theme/tokens';
 import { useTheme, useThemedStyles } from '../theme/useTheme';
 
 /**
- * Onboarding: pick your repertoire, then say roughly when you last cooked each thing.
+ * Onboarding: what this app is, and then an optional head start.
+ *
+ * **The repertoire is what the user cooks — the seed file is not it.** `assets/
+ * seed_dishes.json` is a suggestion list offered once to save some typing, and that is the
+ * whole of its role. It is offered with **nothing ticked**, it is skippable, and skipping
+ * it is a perfectly normal way to start: dishes are added from the Dishes tab, by hand, one
+ * at a time, as the user thinks of things they cook. An earlier version of this screen had
+ * all sixty-eight pre-ticked, which quietly made a stranger's list the answer to "what do
+ * you cook" (`docs/SPEC.md` §18.1).
+ *
+ * **It does not ask about your cooking history.** A second step used to collect a
+ * last-cooked bucket per dish and write `isEstimated` events. It was an interview before
+ * the app had shown anything, in exchange for day counts the app will learn on its own
+ * within a week (§18.3).
  *
  * **Not a route, unlike the sketch in `IMPLEMENTATION.md` §3.** Onboarding is not somewhere
  * you navigate to — it is the state the app is in before it has a repertoire, in exactly the
- * way the migration gate and the boot failure in `app/_layout.tsx` are. Rendering it in place
- * of the `Stack` is what makes it impossible to flash Today first, to reach it with a back
- * gesture afterwards, or to leave it half-done in the navigator's history. The gate is
- * `useOnboardingGate`, and it is live, so committing the writes below is what dismisses this
+ * way the migration gate and the boot failure in `app/_layout.tsx` are. The gate is
+ * `useOnboardingGate`, and it is live, so committing the write below is what dismisses this
  * screen — there is nothing to navigate.
- *
- * Both steps are skippable and nothing is required. `docs/SPEC.md` §18 has the reasoning;
- * the arithmetic and the grouping are in `src/db/onboardingModel.ts`, tested in Node.
  */
 
-type Step = 'pick' | 'estimate';
+type Step = 'intro' | 'starter';
 
 export function Onboarding() {
   const styles = useThemedStyles(makeStyles);
   const roleRows = useLiveQuery(roleConfigQuery());
 
-  const [step, setStep] = useState<Step>('pick');
-  // Everything ticked. The seed file's own note is "accept what you cook, delete the rest",
-  // and it is the faster answer for the common case (SPEC §18.1).
-  const [selected, setSelected] = useState<ReadonlySet<string>>(() =>
-    defaultSelection(SEED_CATALOG),
-  );
-  const [estimates, setEstimates] = useState<ReadonlyMap<string, LastCookedBucket>>(
-    () => new Map(),
-  );
+  const [step, setStep] = useState<Step>('intro');
+  // **Nothing pre-ticked.** The list is a shortcut, not a default repertoire, and the
+  // honest opening position is that the app knows nothing about what this person cooks.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [error, setError] = useState<Error | null>(null);
 
   // The one write in the app that cannot be repeated harmlessly: a second tap would insert
-  // the whole repertoire twice, and the gate only closes on the re-render after the first.
+  // every picked dish twice, and the gate only closes on the re-render after the first.
   const saving = useRef(false);
 
-  // Both memoised on the live query's own array, so ticking a box does not rebuild
-  // sixty-eight rows: `roles` feeds the grouping, and the grouping feeds the list.
   const roles = useMemo(() => roleRows.data ?? [], [roleRows.data]);
   const picked = useMemo(() => selectedEntries(SEED_CATALOG, selected), [selected]);
 
@@ -72,54 +74,46 @@ export function Onboarding() {
     if (saving.current) return;
     saving.current = true;
     try {
-      finishOnboarding({ entries, estimates: pruneEstimates(estimates, selected) });
+      finishOnboarding(entries);
     } catch (caught) {
       saving.current = false;
       setError(caught instanceof Error ? caught : new Error(String(caught)));
     }
   }
 
-  // Roles carry the section labels and their order, so there is nothing honest to draw
-  // until that read lands. It is seeded at boot, so this is one frame at most — unless it
-  // failed, in which case saying so beats a blank screen that never resolves.
-  if (roleRows.updatedAt === undefined || roleRows.error !== undefined) {
+  // Roles carry the section labels and their order, so there is nothing honest to draw on
+  // the second step until that read lands. It is seeded at boot, so this is one frame at
+  // most — unless it failed, in which case saying so beats a blank screen.
+  if (roleRows.error !== undefined) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {roleRows.error === undefined ? null : (
-          <View style={styles.header}>
-            <Text style={styles.error}>{roleRows.error.message}</Text>
-          </View>
-        )}
+        <View style={styles.header}>
+          <Text style={styles.error}>{roleRows.error.message}</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      {step === 'pick' ? (
-        <PickStep
+      {step === 'intro' ? (
+        <IntroStep
+          error={error}
+          onContinue={() => setStep('starter')}
+          // Straight past the starter list, with nothing taken from it. The Dishes tab is
+          // where dishes come from either way; this only skips the shortcut.
+          onSkip={() => finish([])}
+        />
+      ) : (
+        <StarterStep
           roles={roles}
           selected={selected}
+          picked={picked.length}
           onToggle={(key) => setSelected((current) => toggleKey(current, key))}
           onSection={(entries, on) =>
             setSelected((current) => setSectionKeys(current, entries, on))
           }
-          pickedCount={picked.length}
-          // Nothing picked means nothing to estimate, so the second step would be an empty
-          // list with a Finish button on it. Skipping straight to the end is the same
-          // outcome with one less dead screen.
-          onContinue={() => (picked.length === 0 ? finish(picked) : setStep('estimate'))}
-          error={error}
-        />
-      ) : (
-        <EstimateStep
-          entries={picked}
-          roles={roles}
-          estimates={estimates}
-          onSet={(key, bucket) =>
-            setEstimates((current) => setBucket(current, key, bucket))
-          }
-          onBack={() => setStep('pick')}
+          onBack={() => setStep('intro')}
           onFinish={() => finish(picked)}
           error={error}
         />
@@ -129,7 +123,88 @@ export function Onboarding() {
 }
 
 // ---------------------------------------------------------------------------
-// Step 1 — what do you cook
+// Step 1 — what the app is
+// ---------------------------------------------------------------------------
+
+/**
+ * Four things, which together are the whole app.
+ *
+ * The order matters: what it is for, then what it needs from you, then what it gives back,
+ * then the thing people ask about an app that holds years of their life. The third one is
+ * deliberately honest about the wait — an app that promises insight on day one and then
+ * says "new dish" for a fortnight reads as broken rather than as patient.
+ */
+const POINTS: readonly { icon: LucideIcon; title: string; body: string }[] = [
+  {
+    icon: CookingPot,
+    title: 'One question',
+    body: 'What should I cook right now? Vantillu answers it from the dishes you already make, ranked by how long it has been and what time of day it is.',
+  },
+  {
+    icon: PencilLine,
+    title: 'Your dishes, added by you',
+    body: 'Nothing is suggested that you have not told it you cook. Add dishes from the Dishes tab whenever one comes to mind — a name and a meal is all it needs.',
+  },
+  {
+    icon: Check,
+    title: 'Logging is one tap',
+    body: 'Tap a suggestion on Today, confirm, done. Jot a note for next time if you want — those notes are what slowly turn into your real recipe.',
+  },
+  {
+    icon: TrendingUp,
+    title: 'The rhythm builds itself',
+    body: 'After three cooks of a dish it works out how often you usually make it and starts flagging what is overdue. Until then it says "new dish" rather than inventing a number.',
+  },
+  {
+    icon: Smartphone,
+    title: 'It stays on this phone',
+    body: 'No account, no sign-in, nothing uploaded. Just this phone, which is also why the export in settings will matter one day.',
+  },
+];
+
+function IntroStep({
+  error,
+  onContinue,
+  onSkip,
+}: {
+  error: Error | null;
+  onContinue: () => void;
+  onSkip: () => void;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
+
+  return (
+    <>
+      <ScrollView contentContainerStyle={styles.introScroll}>
+        <Text style={styles.eyebrow}>A cooking log</Text>
+        <Text style={styles.introTitle}>Vantillu</Text>
+
+        <View style={styles.points}>
+          {POINTS.map(({ icon: Icon, title, body }) => (
+            <View key={title} style={styles.point}>
+              <View style={styles.pointIcon}>
+                <Icon size={17} strokeWidth={1.7} color={colors.ink2} />
+              </View>
+              <View style={styles.pointBody}>
+                <Text style={styles.pointTitle}>{title}</Text>
+                <Text style={styles.pointText}>{body}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+
+      <Footer error={error}>
+        <PrimaryButton label="Start with a few suggestions" onPress={onContinue} />
+        <GhostButton label="Skip — I'll add my own" onPress={onSkip} />
+      </Footer>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Step 2 — the optional starter list
 // ---------------------------------------------------------------------------
 
 type PickRow =
@@ -147,21 +222,23 @@ function toRows(sections: readonly CatalogSection[]): PickRow[] {
   return out;
 }
 
-function PickStep({
+function StarterStep({
   roles,
   selected,
+  picked,
   onToggle,
   onSection,
-  pickedCount,
-  onContinue,
+  onBack,
+  onFinish,
   error,
 }: {
   roles: readonly RoleConfigRow[];
   selected: ReadonlySet<string>;
+  picked: number;
   onToggle: (key: string) => void;
   onSection: (entries: readonly SeedCatalogEntry[], on: boolean) => void;
-  pickedCount: number;
-  onContinue: () => void;
+  onBack: () => void;
+  onFinish: () => void;
   error: Error | null;
 }) {
   const styles = useThemedStyles(makeStyles);
@@ -171,8 +248,8 @@ function PickStep({
   return (
     <>
       <View style={styles.header}>
-        <Text style={styles.eyebrow}>Setting up · 1 of 2</Text>
-        <Text style={styles.title}>What do you cook?</Text>
+        <Text style={styles.eyebrow}>Optional</Text>
+        <Text style={styles.title}>Anything here you cook?</Text>
       </View>
 
       <FlatList
@@ -184,8 +261,9 @@ function PickStep({
         extraData={selected}
         ListHeaderComponent={
           <Text style={styles.blurb}>
-            A starter list, weighted to Andhra cooking. Untick anything you don't make —
-            only the ticked ones become your repertoire.
+            A list of common Andhra dishes, purely to save you some typing. Tick the ones
+            you actually make and leave the rest — you can add anything else from the
+            Dishes tab, any time.
           </Text>
         }
         renderItem={({ item }) =>
@@ -208,12 +286,13 @@ function PickStep({
       <Footer error={error}>
         <PrimaryButton
           label={
-            pickedCount === 0
-              ? 'Continue with none'
-              : `Continue with ${pickedCount} ${pickedCount === 1 ? 'dish' : 'dishes'}`
+            picked === 0
+              ? 'Start with none'
+              : `Add ${picked} ${picked === 1 ? 'dish' : 'dishes'}`
           }
-          onPress={onContinue}
+          onPress={onFinish}
         />
+        <GhostButton label="Back" onPress={onBack} />
       </Footer>
     </>
   );
@@ -288,113 +367,10 @@ function CheckRow({
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 — when did you last make these
-// ---------------------------------------------------------------------------
-
-function EstimateStep({
-  entries,
-  roles,
-  estimates,
-  onSet,
-  onBack,
-  onFinish,
-  error,
-}: {
-  entries: readonly SeedCatalogEntry[];
-  roles: readonly RoleConfigRow[];
-  estimates: ReadonlyMap<string, LastCookedBucket>;
-  onSet: (key: string, bucket: LastCookedBucket) => void;
-  onBack: () => void;
-  onFinish: () => void;
-  error: Error | null;
-}) {
-  const styles = useThemedStyles(makeStyles);
-
-  const rows = useMemo(
-    () => toRows(groupCatalogByRole(entries, roles)),
-    [entries, roles],
-  );
-
-  return (
-    <>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>Setting up · 2 of 2</Text>
-        <Text style={styles.title}>When did you last make these?</Text>
-      </View>
-
-      <FlatList
-        data={rows}
-        keyExtractor={(row) => row.id}
-        contentContainerStyle={styles.list}
-        extraData={estimates}
-        ListHeaderComponent={
-          <Text style={styles.blurb}>
-            Only the ones you remember, and roughly is fine. Leave the rest blank — the
-            app picks up your rhythm from the cooks you log from here on.
-          </Text>
-        }
-        renderItem={({ item }) =>
-          item.kind === 'section' ? (
-            <Text style={styles.sectionLabelPlain}>{item.section.label}</Text>
-          ) : (
-            <EstimateRow
-              entry={item.entry}
-              bucket={estimates.get(item.entry.key)}
-              onSet={(bucket) => onSet(item.entry.key, bucket)}
-            />
-          )
-        }
-      />
-
-      <Footer error={error}>
-        <PrimaryButton label="Finish" onPress={onFinish} />
-        <GhostButton label="Back" onPress={onBack} />
-      </Footer>
-    </>
-  );
-}
-
-function EstimateRow({
-  entry,
-  bucket,
-  onSet,
-}: {
-  entry: SeedCatalogEntry;
-  bucket: LastCookedBucket | undefined;
-  onSet: (bucket: LastCookedBucket) => void;
-}) {
-  const styles = useThemedStyles(makeStyles);
-
-  return (
-    <View style={styles.estimateRow}>
-      <Text style={styles.rowName} numberOfLines={1}>
-        {entry.name}
-      </Text>
-      {/* Grouped, because the three are one answer rather than three switches — the row
-          has no visible label of its own, so the dish name has to be the group's. */}
-      <View
-        style={styles.pills}
-        accessibilityRole="radiogroup"
-        accessibilityLabel={`When did you last make ${entry.name}?`}
-      >
-        {LAST_COOKED_OPTIONS.map((option) => (
-          <PillToggle
-            key={option.value}
-            label={option.label}
-            selected={bucket === option.value}
-            onPress={() => onSet(option.value)}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
 
 /**
  * The action bar, pinned rather than at the end of the list. Sixty-eight rows is a long
- * way to scroll to find out how to leave, and both steps are ones you should be able to
+ * way to scroll to find out how to leave, and every step here is one you should be able to
  * end at any moment.
  */
 function Footer({ error, children }: { error: Error | null; children: ReactNode }) {
@@ -418,6 +394,11 @@ const makeStyles = ({ colors, text }: Theme) => ({
     paddingTop: space.md,
     paddingBottom: space.lg,
   },
+  introScroll: {
+    paddingHorizontal: layout.screenPaddingH,
+    paddingTop: space.xxl,
+    paddingBottom: space.xxl,
+  },
   eyebrow: {
     ...text.eyebrow,
   },
@@ -425,9 +406,45 @@ const makeStyles = ({ colors, text }: Theme) => ({
     ...text.title,
     marginTop: 3,
   },
+  introTitle: {
+    ...text.title,
+    fontSize: 32,
+    lineHeight: 36,
+    marginTop: space.xs,
+  },
   blurb: {
     ...text.bodySmall,
     paddingBottom: space.lg,
+  },
+  points: {
+    marginTop: space.xxl,
+    gap: space.xl,
+  },
+  point: {
+    flexDirection: 'row' as const,
+    gap: space.lg,
+  },
+  pointIcon: {
+    width: 30,
+    height: 30,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderRadius: radius.tile,
+    backgroundColor: colors.steel1,
+    borderWidth: border.thin,
+    borderColor: colors.lineSoft,
+  },
+  pointBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  pointTitle: {
+    ...text.cardTitle,
+    fontSize: 15,
+  },
+  pointText: {
+    ...text.bodySmall,
   },
   list: {
     paddingHorizontal: layout.screenPaddingH,
@@ -444,11 +461,6 @@ const makeStyles = ({ colors, text }: Theme) => ({
   sectionLabel: {
     ...text.sectionHeading,
     flex: 1,
-  },
-  sectionLabelPlain: {
-    ...text.sectionHeading,
-    paddingTop: space.xl,
-    paddingBottom: space.md,
   },
   checkRow: {
     flexDirection: 'row' as const,
@@ -485,16 +497,6 @@ const makeStyles = ({ colors, text }: Theme) => ({
   rowMeta: {
     ...text.meta,
     marginTop: space.xs,
-  },
-  estimateRow: {
-    gap: space.md,
-    paddingVertical: 11,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: colors.lineSoft,
-  },
-  pills: {
-    flexDirection: 'row' as const,
-    gap: space.sm,
   },
   footer: {
     gap: space.md,
