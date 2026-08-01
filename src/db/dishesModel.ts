@@ -16,6 +16,7 @@ import {
   groupSlots,
   hasRecipe,
   NO_EVENTS,
+  trimToNull,
 } from './rows';
 
 /**
@@ -43,6 +44,18 @@ export interface DishListItem {
   effort: Effort;
   /** Display only, as everywhere else (SPEC §1.2). */
   minutes: number | null;
+  /**
+   * The recipe, trimmed; null when the user has not written one. A dish with no recipe is a
+   * normal dish, so nothing downstream may treat this as incomplete.
+   */
+  ingredientsText: string | null;
+  methodText: string | null;
+  /**
+   * The dish's own stable notes — the third kind of note, distinct from the recipe body
+   * above and from a cook event's `tweakNote` (`CLAUDE.md`).
+   */
+  notes: string | null;
+  /** True when there is an ingredients list or a method. Notes alone are not a recipe. */
   hasRecipe: boolean;
   prepKind: PrepKind | null;
   prepLabel: string | null;
@@ -105,6 +118,11 @@ export function buildDishList(inputs: DishesInputs, now: Date): DishListItem[] {
       primaryIngredient: d.primaryIngredient,
       effort: asEffort(d.effort),
       minutes: d.minutes,
+      ingredientsText: trimToNull(d.ingredientsText),
+      methodText: trimToNull(d.methodText),
+      notes: trimToNull(d.notes),
+      // Through `hasText`, so this cannot disagree with the trimming just above about what
+      // counts as content.
       hasRecipe: hasRecipe(d),
       prepKind: asPrepKind(d.prepKind),
       prepLabel: d.prepLabel,

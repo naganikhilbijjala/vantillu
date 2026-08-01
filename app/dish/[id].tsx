@@ -5,6 +5,7 @@ import { BackLink } from '../../src/components/BackLink';
 import { CookTimeline } from '../../src/components/CookTimeline';
 import { IntervalGauge } from '../../src/components/IntervalGauge';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
+import { Recipe } from '../../src/components/Recipe';
 import { StatGrid, StatTile } from '../../src/components/StatTile';
 import type { CookTimelineEntry } from '../../src/db/cookModel';
 import { type DishListItem, patternSummary } from '../../src/db/dishesModel';
@@ -16,12 +17,16 @@ import { useThemedStyles } from '../../src/theme/useTheme';
  * One dish: what it is, how its rhythm actually looks, and how to log a cook.
  *
  * Pushed over the tab bar rather than living inside it, so the list underneath keeps its
- * scroll position, its role filter and its search — which is this phase's acceptance
- * criterion.
+ * scroll position, its role filter and its search.
  *
- * **The recipe and the cook-note timeline are Phase 7.** They are deliberately absent
- * rather than stubbed: an empty "Recipe" heading with nothing under it reads as a broken
- * screen, and a dish with no recipe is supposed to look like a normal dish.
+ * Sections run in the mockup's order: what it is, how its rhythm looks, the recipe, the
+ * dish's own notes, then what happened the last few times. Three of those are different
+ * kinds of writing about the same dish and they are never merged (`CLAUDE.md`).
+ *
+ * **A dish with no recipe looks intentional, not broken.** The Recipe section is the one
+ * place that has to hold that line, so the empty state is an invitation with an "Add recipe"
+ * button rather than a bare heading over nothing, and the Notes section is simply absent
+ * until there are notes — reachable in one tap through the same editor either way.
  */
 export default function DishDetail() {
   const styles = useThemedStyles(makeStyles);
@@ -122,9 +127,25 @@ function Body({
 
       <Text style={styles.slots}>{slots}</Text>
 
-      {/* Pulled forward from Phase 7: Phase 6 captures a note per cook, and text that
-          vanishes on save reads as a bug however the roadmap is written. The recipe view
-          and the dish's own notes are still Phase 7. */}
+      <Text style={styles.heading}>Recipe</Text>
+      <Recipe
+        ingredients={dish.ingredientsText}
+        method={dish.methodText}
+        onEdit={() => router.push(`/dish/edit/${dish.id}`)}
+      />
+
+      {/* Absent rather than empty when there are nothing but a heading to show. The editor
+          behind "Add recipe" / "Edit recipe" holds this field too, so notes are always one
+          tap away without a section that exists only to say it has nothing in it. */}
+      {dish.notes === null ? null : (
+        <>
+          <Text style={styles.heading}>Notes</Text>
+          <Text style={styles.notes}>{dish.notes}</Text>
+        </>
+      )}
+
+      {/* Pulled forward into Phase 6: it captures a note per cook, and text that vanishes on
+          save reads as a bug however the roadmap is written. */}
       <Text style={styles.heading}>From past cooks</Text>
       <CookTimeline entries={timeline} />
 
@@ -179,6 +200,9 @@ const makeStyles = ({ colors, text }: Theme) => ({
   slots: {
     ...text.bodySmall,
     marginTop: space.lg,
+  },
+  notes: {
+    ...text.body,
   },
   action: {
     marginTop: space.xxl,

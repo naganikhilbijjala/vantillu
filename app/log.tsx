@@ -6,7 +6,6 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { DishListRow } from '../src/components/DishListRow';
@@ -15,6 +14,7 @@ import { PillToggle } from '../src/components/PillToggle';
 import { PrimaryButton } from '../src/components/PrimaryButton';
 import { SearchField } from '../src/components/SearchField';
 import { SegmentedField } from '../src/components/SegmentedField';
+import { TextField } from '../src/components/TextField';
 import { slotForDate } from '../src/core/slots';
 import type { Slot } from '../src/core/types';
 import { confirmationFor } from '../src/db/cookModel';
@@ -22,7 +22,7 @@ import { ALL_ROLES, type DishListItem, filterDishes } from '../src/db/dishesMode
 import { logCook, newMealId } from '../src/db/queries/cook';
 import { asSlot } from '../src/db/rows';
 import { useDishes } from '../src/hooks/useDishes';
-import { border, layout, radius, space, type Theme } from '../src/theme/tokens';
+import { layout, radius, space, type Theme } from '../src/theme/tokens';
 import { useThemedStyles } from '../src/theme/useTheme';
 
 /**
@@ -228,22 +228,16 @@ function CookForm({
         onChange={setSlot}
       />
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>For next time</Text>
-        {/* The sequence of these is what becomes the real recipe, so it is per cook event
-            and never folded into the dish. No dictation button: `expo-speech` is
-            text-to-speech, and the OS keyboard's mic is already there (SPEC §12). */}
-        <TextInput
-          value={tweakNote}
-          onChangeText={setTweakNote}
-          placeholder="Less tamarind, 4 whistles not 3"
-          style={styles.input}
-          multiline
-          numberOfLines={2}
-          textAlignVertical="top"
-          accessibilityLabel="Note for next time"
-        />
-      </View>
+      {/* The sequence of these is what becomes the real recipe, so it is per cook event and
+          never folded into the dish — the dish's own notes are a different field, edited on
+          a different screen. */}
+      <TextField
+        label="For next time"
+        value={tweakNote}
+        onChangeText={setTweakNote}
+        placeholder="Less tamarind, 4 whistles not 3"
+        accessibilityLabel="Note for next time"
+      />
 
       <View style={styles.field}>
         <Text style={styles.fieldLabel}>Batch</Text>
@@ -319,17 +313,6 @@ const makeStyles = ({ colors, text }: Theme) => ({
   },
   fieldLabel: {
     ...text.eyebrow,
-  },
-  input: {
-    ...text.body,
-    minHeight: 68,
-    paddingHorizontal: 11,
-    paddingVertical: 10,
-    borderWidth: border.thin,
-    borderColor: colors.lineSoft,
-    borderRadius: radius.control,
-    backgroundColor: colors.steel1,
-    color: colors.ink,
   },
   hint: {
     ...text.bodySmall,

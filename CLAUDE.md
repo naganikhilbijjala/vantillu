@@ -27,7 +27,8 @@ anything on iOS.
    `src/db/queries/` instead.
    `src/db/` is split the same way one level down: **`src/db/queries/` imports `db`;
    modules at the `src/db/` root do not** (`time.ts`, `roles.ts`, `rows.ts`, `settings.ts`,
-   `todayModel.ts`, `dishesModel.ts`, `cookModel.ts`). Row-shaping and window logic go in the latter, so
+   `todayModel.ts`, `dishesModel.ts`, `cookModel.ts`, `dishModel.ts`).
+   Row-shaping and window logic go in the latter, so
    they can be unit tested in Node. Never read the clock in either — take `now` as an
    argument. One screen model per screen; shared row shapes and TEXT→union narrowing live
    in `rows.ts` so two models can't disagree about what a bad value means.
@@ -75,6 +76,11 @@ seeded with defaults, editable later. Don't add a CHECK constraint.
 
 `tweakNote` is per-event on purpose. The chronological sequence of tweaks is what
 becomes the user's real recipe. Never fold them into the dish record.
+
+The first two rows are edited together on `app/dish/edit/[id].tsx`, because they change on
+the same occasions and splitting them across two screens would be three taps to write down
+one recipe. Sharing an editor does not make them one field: `notes` is what is true about the
+dish every time, the recipe body is how you make it, and neither is a `tweakNote`.
 
 ## Suggestion logic
 
@@ -124,6 +130,10 @@ derived from food. Deliberately **not** warm cream and terracotta.
   in red; unknown median renders as a hollow dashed bar.
 - Empty states are inviting, never nagging. A dish with no recipe is a normal dish, not
   an incomplete one. No completion meters on data entry.
+- The recipe is two free-text fields. Ingredients render as one bullet per line and the
+  method as paragraphs split on blank lines — free text in, something that reads like a
+  recipe out. That split is a *rendering* decision, so it lives in `src/db/dishModel.ts`
+  as pure tested functions, not inside the component. No structured ingredient model.
 
 ## Commands
 

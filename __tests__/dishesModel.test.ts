@@ -39,6 +39,7 @@ function dishRow(overrides: Partial<DishRow> = {}): DishRow {
     season: null,
     ingredientsText: null,
     methodText: null,
+    notes: null,
     isArchived: false,
     createdAt: '2026-01-01T00:00:00',
     ...overrides,
@@ -121,6 +122,25 @@ describe('buildDishList', () => {
     const item = one({ minutes: 35, methodText: 'Fold into cold rice.' });
     expect(item.minutes).toBe(35);
     expect(item.hasRecipe).toBe(true);
+  });
+
+  it('trims the recipe and the notes, and reads whitespace as absent', () => {
+    const item = one({
+      ingredientsText: '  1 cup toor dal\n',
+      methodText: '   ',
+      notes: '\nBetter the next day. ',
+    });
+    expect(item.ingredientsText).toBe('1 cup toor dal');
+    expect(item.methodText).toBeNull();
+    expect(item.notes).toBe('Better the next day.');
+  });
+
+  it('does not count the dish notes as a recipe', () => {
+    // Three distinct kinds of note (CLAUDE.md). A dish with only notes has no recipe, and
+    // the dishes list's "N with recipes" count depends on that staying true.
+    const item = one({ notes: 'Do not cover the pan or it goes slimy.' });
+    expect(item.notes).not.toBeNull();
+    expect(item.hasRecipe).toBe(false);
   });
 });
 

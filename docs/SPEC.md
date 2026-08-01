@@ -756,9 +756,13 @@ The verdict line never claims what it cannot back up. With no median it reads *N
 yet* — or *Never cooked yet* at zero cooks — rather than a due date. A stat with no honest
 value is an **em dash, never a zero**: "—" and "every 0 days" are different claims.
 
-**Recipe and the cook-note timeline are Phase 7**, and are absent rather than stubbed until
-then. An empty "Recipe" heading reads as a broken screen, and a dish with no recipe is
-supposed to look like a normal dish (§12, and the empty-state rule in `CLAUDE.md`).
+Then the recipe, the dish's notes, and the cook-note timeline. The timeline landed in Phase 6
+(§16.5) and the other two in Phase 7 (§17). Section order is the mockup's: what it is, how its
+rhythm looks, how you make it, what is always true about it, what happened last time.
+
+The **Notes** section is absent when there are no notes, rather than an empty heading. So is
+any section with nothing in it — with one deliberate exception, **Recipe**, which is the
+section the empty-state rule is really about and therefore states its own emptiness (§17.2).
 
 ### 15.5 Navigation
 
@@ -841,9 +845,86 @@ which is the whole reason they live on the cook event.
 
 This was **pulled forward from Phase 7**. Phase 6 shipped note capture with nothing that
 displayed it, and text that vanishes on save reads as a bug however the roadmap is written.
-The recipe view and the dish's own `notes` field are still Phase 7.
+The recipe view and the dish's own `notes` field followed in Phase 7 — see §17.
 
 **Every cook appears, not only the annotated ones.** The timeline is the history; the notes
 are the interesting part of it. Filtering to annotated cooks would make the gaps look like
 months of not cooking something. An unannotated cook reads "no note", and the year is
 dropped from the date until it stops being obvious.
+
+---
+
+## 17. The recipe, and the dish's own notes
+
+Added in Phase 7. The third kind of writing about a dish, after the cook note (§16.5) and the
+pattern the app derives on its own.
+
+### 17.1 Two free-text fields, rendered as a recipe
+
+`dish.ingredients_text` and `dish.method_text` are single blobs of free text. There is no
+structured ingredient model and there will not be one in v1 (§12): a parser for "a small piece
+of jaggery" and "4 whistles" is weeks of work and buys nothing until shopping lists exist.
+
+What the detail screen does instead is *render* them as a recipe:
+
+- **Ingredients: one bullet per line.** Blank lines are dropped, and a bullet character the
+  user typed at the start of a line is stripped rather than drawn twice. A dash inside the
+  text — "1 - 2 tsp" — is left alone.
+- **Method: paragraphs split on blank lines.** A single newline stays inside its paragraph,
+  because a step written across two lines is one step, not two instructions.
+
+Both rules are pure functions in `src/db/dishModel.ts`, not logic inside a component, so they
+are unit tested in Node like everything else that decides what the data means.
+
+### 17.2 The empty state states its emptiness — and nothing else does
+
+A dish with no recipe is a **normal dish, not an incomplete one**. The Recipe section says so
+in as many words — *"No recipe saved yet. Add it whenever you have a minute — the app works
+fine without one"* — with an **Add recipe** button inside the same dashed box.
+
+That is the one section allowed to render when it has nothing, because it is the one place
+the roadmap's own acceptance criterion lands: a dish with no recipe has to look intentional
+rather than broken, and a bare "Recipe" heading over blank space looks broken. Every other
+section with nothing in it, **Notes** included, is simply absent.
+
+**No completion meters, anywhere on data entry.** Not a progress bar, not "1 of 3 fields", not
+a badge. The dishes list's eyebrow counts recipes — "40 dishes · 12 with recipes" — and that is
+a fact about the repertoire, not a score to improve. The mockup's Insights screen shows the
+same number as a fraction, "12/40"; **Phase 11 should not copy that**, because a denominator
+turns a count into a target.
+
+### 17.3 The editor
+
+One screen, `app/dish/edit/[id].tsx`, reached from the Recipe section's button. Three fields —
+ingredients, method, notes — all optional, all free text, no units to fill in, nothing
+required. Saving with everything blank is a valid outcome: it clears the recipe and leaves a
+normal dish.
+
+`notes` is edited here, alongside the recipe, because the two change on the same occasions and
+splitting them would be three taps to write down one recipe. **They remain distinct fields**
+(`CLAUDE.md`): `notes` is what is true about the dish every time, the recipe body is how to
+make it, and a `tweakNote` is what happened once.
+
+An emptied field is stored as **NULL, not `''`**. Everything that asks "does this dish have a
+recipe" reads through the same trimming rule, so a recipe the user deleted has to become
+genuinely absent again — otherwise the dish would keep claiming one with no way to undo it.
+
+**Leaving with unsaved edits asks first**, and only then. The recipe is the longest thing
+anyone types into this app and the only text with no copy anywhere else, so a stray back
+gesture mid-sentence must not be able to bin it. The comparison trims both sides, so a space
+added and removed is not an edit and the confirmation stays quiet on the way out of a screen
+that was only read. On iOS the back *gesture* is disabled for this route rather than
+intercepted, because a native swipe pops the screen with no chance to intervene.
+
+### 17.4 What it deliberately does not do
+
+- **No recipe history.** The recipe is a document, not a log — an UPDATE, not a new row. The
+  chronological record of how a dish changes is the sequence of `tweakNote`s (§16.5), and
+  versioning the body as well would store that history twice and immediately raise the
+  question of which copy is real.
+- **No photos**, per §10.4. The column on `cook_event` stays ready.
+- **No dictation button**, per §12. The OS keyboard's mic is already there.
+- **`dish.source` is not written.** The column exists — "Amma", a URL, a cookbook — and
+  nothing reads or writes it, so it is the one dish field with no path to it. Adding it is one
+  field in the editor and one quiet line under the method; it was left out of Phase 7 because
+  the phase named three fields and this would be a fourth. A product decision, not a task.

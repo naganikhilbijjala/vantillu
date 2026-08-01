@@ -496,6 +496,38 @@ Recipe view and editor (free text ingredients + method), dish notes, and the coo
 timeline on the detail screen. Empty states must be inviting, never nagging.
 **Done when:** a dish with no recipe looks intentional rather than broken.
 
+**Smaller than the line above implies**, because the cook-note timeline was pulled forward
+into Phase 6 (SPEC §16.5) — Phase 6 shipped note capture, and text that vanishes on save
+reads as a bug however the roadmap is written. What was left is the recipe and `dish.notes`.
+SPEC §17 records the product decisions.
+
+**The route is the sketched `dish/edit/[id].tsx`, editing less than §3 promised.** That line
+says "add/edit dish + recipe"; this phase owns the recipe and the notes, so that is all it
+edits. The dish's identity — name, role, effort, slots — is not editable anywhere yet, and
+there is still no path that *adds* a dish, so an editor that also renamed things would be
+half of a screen nobody can reach the other half of. Whenever those fields arrive they widen
+this route rather than needing another one.
+
+**Ingredients and method are stored as two blobs and rendered as a list and paragraphs.**
+Splitting on newlines and blank lines is presentation, not storage, so it sits in
+`src/db/dishModel.ts` — the sibling of `cookModel.ts`, pure and with no clock — where "a
+bullet the user typed themselves is stripped rather than rendered twice" is an assertion
+instead of something to notice later. `dishModel.ts` also owns `hasRecipeEdits`, which is
+what makes the discard confirmation fire only when there is something to lose.
+
+**The editor is the one screen holding text that exists nowhere else**, so leaving it with
+unsaved edits asks first. That needed both halves: `gestureEnabled: false` in the root layout,
+since iOS's swipe-back pops a screen with no chance to intervene, and a `BackHandler`
+intercept in the screen for Android's hardware back. `usePreventRemove` would have covered
+both, and expo-router 57 no longer re-exports React Navigation, so it is not available.
+
+Two smaller things. `dishesQuery()` now also selects `dish.notes`, which looks like the
+mistake `cookEventsForDishQuery` exists to avoid and isn't: the cook log grows a row per meal
+forever, while the dish table is bounded by the size of a repertoire, and `hasRecipe` reads
+those columns on every screen anyway. And `TextField` came out of the log sheet when the
+count went from one multiline input to four — mostly for `placeholderTextColor`, which
+`TextInput` otherwise defaults to a grey that disappears against a dark surface.
+
 ### Phase 8 — onboarding
 Seed picker, then the last-cooked estimate buckets writing `isEstimated` events.
 **Done when:** a fresh install reaches a useful Today screen in under three minutes.

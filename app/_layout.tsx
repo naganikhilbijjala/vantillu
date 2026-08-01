@@ -76,11 +76,12 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: theme.colors.steel2 },
           }}
         >
-          {/* Everything else is a push and needs no entry here; the log sheet is the one
-              screen with a different presentation. `formSheet` is a native bottom sheet on
-              both platforms in react-native-screens 4, which is what the mockup shows —
-              and a partial-height sheet keeps the Today screen visible behind it, so
-              logging never feels like leaving where you were. */}
+          {/* Two screens need an entry. Everything else is a plain push. */}
+
+          {/* `formSheet` is a native bottom sheet on both platforms in
+              react-native-screens 4, which is what the mockup shows — and a partial-height
+              sheet keeps the Today screen visible behind it, so logging never feels like
+              leaving where you were. */}
           <Stack.Screen
             name="log"
             options={{
@@ -91,6 +92,13 @@ export default function RootLayout() {
               gestureEnabled: true,
             }}
           />
+
+          {/* The recipe editor is the only screen holding text that exists nowhere else
+              until it is saved. iOS's swipe-back would pop it with no chance to intervene,
+              so the gesture is off and the screen's own Save and Cancel are the way out.
+              Android's hardware back is intercepted in the screen instead, because it can
+              be — the confirmation is the same either way. */}
+          <Stack.Screen name="dish/edit/[id]" options={{ gestureEnabled: false }} />
         </Stack>
       ) : (
         <BootProgress />

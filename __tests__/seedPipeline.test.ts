@@ -73,6 +73,7 @@ SEED.forEach((seed, index) => {
     season: seed.season ?? null,
     ingredientsText: null,
     methodText: null,
+    notes: null,
     isArchived: false,
     createdAt: '2026-07-27T09:00:00',
   });

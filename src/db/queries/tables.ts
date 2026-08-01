@@ -32,8 +32,15 @@ export function dishesQuery() {
       prepLabel: dish.prepLabel,
       usesLeftoverRice: dish.usesLeftoverRice,
       season: dish.season,
+      // The three free-text fields, read by every screen rather than only by the detail
+      // screen. That looks like the mistake `cookEventsForDishQuery` exists to avoid, and
+      // the difference is what bounds each table: the cook log grows a row per meal
+      // forever, while these are bounded by the size of a repertoire — sixty rows, one
+      // recipe each. `hasRecipe` needs them here anyway, for the dishes list's count and
+      // its per-row marker.
       ingredientsText: dish.ingredientsText,
       methodText: dish.methodText,
+      notes: dish.notes,
       isArchived: dish.isArchived,
       createdAt: dish.createdAt,
     })

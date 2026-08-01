@@ -32,6 +32,7 @@ function dishRow(overrides: Partial<DishRow> = {}): DishRow {
     season: null,
     ingredientsText: null,
     methodText: null,
+    notes: null,
     isArchived: false,
     createdAt: '2026-01-01T00:00:00',
     ...overrides,

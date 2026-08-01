@@ -1,6 +1,6 @@
 import { format, isSameYear } from 'date-fns';
 import type { Rating, Slot } from '../core/types';
-import { asRating } from './rows';
+import { asRating, trimToNull } from './rows';
 import { parseLocalIso, toLocalIso } from './time';
 
 /**
@@ -41,12 +41,6 @@ export interface NewCookEventRow {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
-}
-
-function trimToNull(value: string | null): string | null {
-  if (value === null) return null;
-  const trimmed = value.trim();
-  return trimmed === '' ? null : trimmed;
 }
 
 /**
@@ -114,7 +108,8 @@ export function confirmationFor(dishName: string, medianInterval: number | null)
  *
  * Pulled forward from Phase 7 because Phase 6 started capturing `tweakNote` with nowhere to
  * read it back — text that vanishes on save reads as a bug whatever the roadmap says. The
- * recipe view and the dish notes are still Phase 7.
+ * recipe body and the dish's own notes are a different kind of note and live on the dish;
+ * `src/db/dishModel.ts` handles those.
  */
 export interface CookTimelineEntry {
   id: string;

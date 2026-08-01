@@ -35,6 +35,11 @@ export interface DishRow {
   season: string | null;
   ingredientsText: string | null;
   methodText: string | null;
+  /**
+   * The dish's own stable notes. A third kind of note, separate from the recipe body above
+   * and from a cook event's `tweakNote` — see the table in `CLAUDE.md`.
+   */
+  notes: string | null;
   isArchived: boolean;
   createdAt: string;
 }
@@ -100,9 +105,24 @@ export function asRating(value: number | null): Rating | null {
   return value === 1 || value === 2 || value === 3 ? value : null;
 }
 
+/**
+ * Free text, or nothing at all. Whitespace is not content, so a field the user blanked out
+ * comes back as null rather than as a space.
+ *
+ * One definition, here, rather than one per module: the same rule decides whether a dish
+ * has a recipe and whether a cook has a note, and the two must not disagree. A note of
+ * `"  "` that counted as text in the writer and not in the reader would save as content
+ * and render as an empty line.
+ */
+export function trimToNull(value: string | null): string | null {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
 /** Whitespace is not content. A dish with no recipe is a normal dish either way. */
 export function hasText(value: string | null): boolean {
-  return value !== null && value.trim().length > 0;
+  return trimToNull(value) !== null;
 }
 
 export function hasRecipe(dish: DishRow): boolean {
