@@ -521,6 +521,11 @@ since iOS's swipe-back pops a screen with no chance to intervene, and a `BackHan
 intercept in the screen for Android's hardware back. `usePreventRemove` would have covered
 both, and expo-router 57 no longer re-exports React Navigation, so it is not available.
 
+**The editor has no `KeyboardAvoidingView`**, because on Android it did nothing and the Notes
+field — the last one on the screen — typed itself under the keyboard. See §7: it is a
+platform fact rather than anything about this screen, and `src/hooks/useKeyboardInset.ts`
+carries the explanation.
+
 Two smaller things. `dishesQuery()` now also selects `dish.notes`, which looks like the
 mistake `cookEventsForDishQuery` exists to avoid and isn't: the cook log grows a row per meal
 forever, while the dish table is bounded by the size of a repertoire, and `hasRecipe` reads
@@ -563,8 +568,18 @@ that prevent the worst of it:
 - Never hard-code `elevation` (Android-only) or `shadow*` (iOS-only) alone — use
   `Platform.select` or a shared `card` token that sets both.
 - Fonts render ~1px larger on Android at the same `fontSize`. Don't pixel-tune to Android.
-- Test `KeyboardAvoidingView` behaviour explicitly; `behavior="padding"` works on iOS,
-  `height` is usually right on Android.
+- **`KeyboardAvoidingView` does nothing on Android in this SDK.** The advice this line used
+  to give — `padding` on iOS, `height` on Android — assumed the window resizes when the
+  keyboard opens. Edge-to-edge is mandatory from Android 16 and Expo SDK 57 removed the
+  opt-out, and an edge-to-edge window does not resize, so `windowSoftInputMode="adjustResize"`
+  is inert and there is no inset for `KeyboardAvoidingView` to mirror. It fails silently: the
+  last field on the screen sits under the keyboard, which is invisible until someone types in
+  it. Phase 7's recipe editor hit exactly that.
+  React Native still *reports* the keyboard, from `WindowInsetsCompat.Type.ime()` rather than
+  from a resize, so `src/hooks/useKeyboardInset.ts` has a trustworthy height on both
+  platforms. The response has to be written in JS: add the inset as scrollable room, then
+  scroll the focused field to the top of what is left. Both halves are needed — shrinking the
+  viewport alone leaves the scroll offset where it was and the field below the fold.
 - Local notification permissions differ: Android 13+ needs `POST_NOTIFICATIONS` at
   runtime, iOS needs an explicit request. Handle both in Phase 9 even though you can't
   test iOS yet.

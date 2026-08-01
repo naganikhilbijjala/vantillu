@@ -28,6 +28,12 @@ export interface TextFieldProps {
   lines?: number;
   /** Defaults to `label`, which is right unless the label is only meaningful in context. */
   accessibilityLabel?: string;
+  /**
+   * For lifting the field clear of the keyboard. The screen owns that, not this component:
+   * only the screen knows what it is scrolling and where this field sits inside it.
+   */
+  onFocus?: () => void;
+  onBlur?: () => void;
 }
 
 /** `text.body` has a 22px line height, plus the input's own 10px of padding either side. */
@@ -42,6 +48,8 @@ export function TextField({
   hint,
   lines = 2,
   accessibilityLabel,
+  onFocus,
+  onBlur,
 }: TextFieldProps) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
@@ -54,6 +62,8 @@ export function TextField({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.ink3}
+        onFocus={onFocus}
+        onBlur={onBlur}
         style={[styles.input, { minHeight: lines * LINE_HEIGHT + VERTICAL_PADDING }]}
         multiline
         // Android centres multiline text vertically without this, so a tall empty field

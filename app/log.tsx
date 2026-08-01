@@ -72,8 +72,13 @@ export default function LogCook() {
 
   return (
     <KeyboardAvoidingView
-      // `padding` is right on iOS; Android's own adjustResize already handles the inset and
-      // doubling it pushes the sheet off screen (IMPLEMENTATION.md §7).
+      // `padding` is right on iOS. Android gets nothing here — but *not* for the reason this
+      // comment used to give. `adjustResize` is inert under the mandatory edge-to-edge of
+      // this SDK, so there is no doubled inset to avoid; there is simply no inset at all
+      // (`src/hooks/useKeyboardInset.ts`). The native form sheet is left to handle its own
+      // keyboard, which so far it appears to. If the note field ever hides under the keyboard
+      // the way the recipe editor's did, the fix is that screen's inset-plus-scroll rather
+      // than another `behavior` guess.
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.sheet}
     >

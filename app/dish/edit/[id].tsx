@@ -1,14 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import {
-  Alert,
-  BackHandler,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, BackHandler, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackLink } from '../../../src/components/BackLink';
 import { GhostButton } from '../../../src/components/GhostButton';
@@ -18,6 +10,7 @@ import type { DishListItem } from '../../../src/db/dishesModel';
 import { type DishRecipeInput, hasRecipeEdits } from '../../../src/db/dishModel';
 import { saveDishRecipe } from '../../../src/db/queries/dish';
 import { useDish } from '../../../src/hooks/useDishes';
+import { useKeyboardInset } from '../../../src/hooks/useKeyboardInset';
 import { layout, space, type Theme } from '../../../src/theme/tokens';
 import { useThemedStyles } from '../../../src/theme/useTheme';
 
@@ -67,6 +60,9 @@ export default function EditDishRecipe() {
   );
 }
 
+/** The three fields, in the order they appear. */
+type FieldKey = 'ingredients' | 'method' | 'notes';
+
 function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }) {
   const styles = useThemedStyles(makeStyles);
 
@@ -76,6 +72,49 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
 
   const input: DishRecipeInput = { ingredientsText, methodText, notes };
   const edited = hasRecipeEdits(input, dish);
+
+  /**
+   * Keeping the field you are typing in above the keyboard.
+   *
+   * `KeyboardAvoidingView` used to be here and did nothing on Android: edge-to-edge is
+   * mandatory in this SDK, so the window no longer resizes and there is no inset for it to
+   * mirror. Notes is the last field on the screen, which is why it was the one you could not
+   * see. `useKeyboardInset` explains the platform detail.
+   *
+   * Two parts, and both are needed. The inset becomes scrollable room at the bottom, or there
+   * is nowhere for the last field to go. Then the focused field is scrolled to the top of
+   * what is left, which is what actually puts it in front of you — shrinking the viewport on
+   * its own leaves the scroll offset where it was and the field below the fold.
+   */
+  const scrollRef = useRef<ScrollView>(null);
+  const keyboardInset = useKeyboardInset();
+  const [focused, setFocused] = useState<FieldKey | null>(null);
+
+  // Where each field sits in the scrolled content. Measured in two parts because `onLayout`
+  // reports a child's offset inside its own parent, and the fields live in a container that
+  // is itself offset from the top of the content.
+  const formTop = useRef(0);
+  const fieldTops = useRef<Record<FieldKey, number>>({
+    ingredients: 0,
+    method: 0,
+    notes: 0,
+  });
+
+  // Keyed on the inset as well as the field, so the order of "focus fired" and "keyboard
+  // finished animating" stops mattering: focusing scrolls with the room available now, and
+  // the arriving inset scrolls again with the room there turned out to be. A single scroll on
+  // focus alone gets clamped short, because the padding it needs does not exist yet.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyboardInset is the trigger
+  useEffect(() => {
+    if (focused === null) return;
+    scrollRef.current?.scrollTo({
+      y: Math.max(formTop.current + fieldTops.current[focused] - space.lg, 0),
+      animated: true,
+    });
+    // `keyboardInset` is not read in the body and is not meant to be. It is here as a
+    // trigger: removing it — which is what the rule's own fix suggests — leaves only the
+    // scroll that happens before the padding exists, and the bug comes straight back.
+  }, [focused, keyboardInset]);
 
   /**
    * Leaving without saving, with a confirmation only when there is something to lose.
@@ -107,27 +146,51 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
     return () => subscription.remove();
   }, [guardedExit]);
 
+  /** Focus and blur for one field. Blur only clears if focus has not already moved on. */
+  function focusProps(key: FieldKey) {
+    return {
+      onFocus: () => setFocused(key),
+      onBlur: () => setFocused((current) => (current === key ? null : current)),
+    };
+  }
+
+  /** Records where a field starts, so focusing it can scroll to exactly there. */
+  function measure(key: FieldKey) {
+    return (event: { nativeEvent: { layout: { y: number } } }) => {
+      fieldTops.current[key] = event.nativeEvent.layout.y;
+    };
+  }
+
   return (
-    <KeyboardAvoidingView
-      // `padding` is right on iOS; Android's own adjustResize already handles the inset and
-      // doubling it pushes the form off screen (IMPLEMENTATION.md §7).
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.flex}
+    <ScrollView
+      ref={scrollRef}
+      // The keyboard's height becomes scrollable room, which is what gives the last field
+      // somewhere to go. `paddingBottom` rather than a spacer view so it collapses to nothing
+      // when the keyboard is down and leaves no dead space behind.
+      contentContainerStyle={[
+        styles.scroll,
+        { paddingBottom: space.xxl + keyboardInset },
+      ]}
+      // Without this the first tap on Save only dismisses the keyboard, and the second one
+      // lands on a button that has moved.
+      keyboardShouldPersistTaps="handled"
     >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
+      <BackLink label={dish.name} onPress={guardedExit} />
+
+      <Text style={styles.eyebrow}>{dish.name}</Text>
+      <Text style={styles.title}>Recipe &amp; notes</Text>
+      <Text style={styles.blurb}>
+        However much or little you want. Free text — no units to fill in, nothing
+        required.
+      </Text>
+
+      <View
+        style={styles.form}
+        onLayout={(event) => {
+          formTop.current = event.nativeEvent.layout.y;
+        }}
       >
-        <BackLink label={dish.name} onPress={guardedExit} />
-
-        <Text style={styles.eyebrow}>{dish.name}</Text>
-        <Text style={styles.title}>Recipe &amp; notes</Text>
-        <Text style={styles.blurb}>
-          However much or little you want. Free text — no units to fill in, nothing
-          required.
-        </Text>
-
-        <View style={styles.form}>
+        <View onLayout={measure('ingredients')}>
           <TextField
             label="Ingredients"
             value={ingredientsText}
@@ -135,8 +198,11 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
             placeholder={'1 cup toor dal\n2 green chillies\nlemon-sized tamarind'}
             hint="One per line."
             lines={6}
+            {...focusProps('ingredients')}
           />
+        </View>
 
+        <View onLayout={measure('method')}>
           <TextField
             label="Method"
             value={methodText}
@@ -144,11 +210,14 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
             placeholder={'Pressure cook 4 whistles.\n\nTemper and pour over.'}
             hint="Leave a blank line between steps."
             lines={8}
+            {...focusProps('method')}
           />
+        </View>
 
-          {/* The third kind of note, and the one that changes least: what is true about the
-              dish every time. Per-cook observations belong on the cook event, which is what
-              the log sheet writes and the timeline shows. */}
+        {/* The third kind of note, and the one that changes least: what is true about the
+            dish every time. Per-cook observations belong on the cook event, which is what
+            the log sheet writes and the timeline shows. */}
+        <View onLayout={measure('notes')}>
           <TextField
             label="Notes"
             value={notes}
@@ -156,23 +225,24 @@ function RecipeForm({ dish, onDone }: { dish: DishListItem; onDone: () => void }
             placeholder="Better the next day. Travels well."
             hint="About the dish itself, not about one cook."
             lines={3}
+            {...focusProps('notes')}
           />
         </View>
+      </View>
 
-        <View style={styles.actions}>
-          <PrimaryButton
-            label="Save"
-            onPress={() => {
-              saveDishRecipe(dish.id, input);
-              // No invalidation: `useLiveQuery` re-runs on the write, so the screen behind
-              // has the new text before this one finishes popping.
-              onDone();
-            }}
-          />
-          <GhostButton label="Cancel" onPress={guardedExit} />
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <View style={styles.actions}>
+        <PrimaryButton
+          label="Save"
+          onPress={() => {
+            saveDishRecipe(dish.id, input);
+            // No invalidation: `useLiveQuery` re-runs on the write, so the screen behind
+            // has the new text before this one finishes popping.
+            onDone();
+          }}
+        />
+        <GhostButton label="Cancel" onPress={guardedExit} />
+      </View>
+    </ScrollView>
   );
 }
 
@@ -180,9 +250,6 @@ const makeStyles = ({ colors, text }: Theme) => ({
   safeArea: {
     flex: 1,
     backgroundColor: colors.steel2,
-  },
-  flex: {
-    flex: 1,
   },
   scroll: {
     paddingHorizontal: layout.screenPaddingH,
