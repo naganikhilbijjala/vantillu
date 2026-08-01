@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DishListRow } from '../../src/components/DishListRow';
+import { FAB_SIZE, Fab } from '../../src/components/Fab';
 import { RoleFilterRow } from '../../src/components/RoleFilterRow';
 import { SearchField } from '../../src/components/SearchField';
 import { SmallButton } from '../../src/components/SmallButton';
@@ -40,17 +41,11 @@ export default function Dishes() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>
-            {dishes.length} {dishes.length === 1 ? 'dish' : 'dishes'} · {recipeCount} with
-            {recipeCount === 1 ? ' a recipe' : ' recipes'}
-          </Text>
-          <Text style={styles.title}>Your repertoire</Text>
-        </View>
-        {/* The only way into the repertoire besides onboarding, which runs once. Here
-            rather than on Today because this is the screen that answers "what do I cook",
-            and because Today's FAB already means something else. */}
-        <SmallButton label="Add a dish" onPress={() => router.push('/dish/edit/new')} />
+        <Text style={styles.eyebrow}>
+          {dishes.length} {dishes.length === 1 ? 'dish' : 'dishes'} · {recipeCount} with
+          {recipeCount === 1 ? ' a recipe' : ' recipes'}
+        </Text>
+        <Text style={styles.title}>Your repertoire</Text>
       </View>
 
       <View style={styles.gutter}>
@@ -90,6 +85,11 @@ export default function Dishes() {
           }
         />
       )}
+
+      {/* Adding a dish is what this tab is for now that the starter list is optional
+          (SPEC §19.4), so it gets the same treatment Today gives logging: floating, thumb
+          height, and never scrolled off by a long list. */}
+      <Fab label="Add a dish" onPress={() => router.push('/dish/edit/new')} />
     </SafeAreaView>
   );
 }
@@ -122,17 +122,9 @@ const makeStyles = ({ colors, text }: Theme) => ({
     backgroundColor: colors.steel2,
   },
   header: {
-    flexDirection: 'row' as const,
-    alignItems: 'flex-end' as const,
-    justifyContent: 'space-between' as const,
-    gap: space.lg,
     paddingHorizontal: layout.screenPaddingH,
     paddingTop: space.md,
     paddingBottom: space.lg,
-  },
-  headerText: {
-    flex: 1,
-    minWidth: 0,
   },
   gutter: {
     paddingHorizontal: layout.screenPaddingH,
@@ -148,7 +140,8 @@ const makeStyles = ({ colors, text }: Theme) => ({
   list: {
     paddingHorizontal: layout.screenPaddingH,
     paddingTop: space.lg,
-    paddingBottom: space.xxl,
+    // Clears the FAB, so the last row and the dev link stay reachable.
+    paddingBottom: FAB_SIZE + space.xxl,
   },
   empty: {
     borderWidth: border.thin,

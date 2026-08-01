@@ -1,18 +1,18 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScrollView, Text, View } from 'react-native';
+import { PencilLine } from 'lucide-react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackLink } from '../../src/components/BackLink';
 import { CookTimeline } from '../../src/components/CookTimeline';
 import { IntervalGauge } from '../../src/components/IntervalGauge';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
 import { Recipe } from '../../src/components/Recipe';
-import { SmallButton } from '../../src/components/SmallButton';
 import { StatGrid, StatTile } from '../../src/components/StatTile';
 import type { CookTimelineEntry } from '../../src/db/cookModel';
 import { type DishListItem, patternSummary } from '../../src/db/dishesModel';
 import { useDish } from '../../src/hooks/useDishes';
-import { layout, space, type Theme } from '../../src/theme/tokens';
-import { useThemedStyles } from '../../src/theme/useTheme';
+import { border, layout, radius, space, type Theme } from '../../src/theme/tokens';
+import { useTheme, useThemedStyles } from '../../src/theme/useTheme';
 
 /**
  * One dish: what it is, how its rhythm actually looks, and how to log a cook.
@@ -71,6 +71,7 @@ function Body({
   timeline: readonly CookTimelineEntry[];
 }) {
   const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
   const router = useRouter();
 
   // Role, effort, and the prep it needs — the three things that decide when it is cookable.
@@ -83,11 +84,27 @@ function Body({
 
   return (
     <View style={styles.gutter}>
-      <Text style={styles.eyebrow}>{eyebrow}</Text>
-      <Text style={styles.title}>{dish.name}</Text>
-      {dish.altName !== null && dish.altName !== dish.name ? (
-        <Text style={styles.altName}>also called {dish.altName}</Text>
-      ) : null}
+      <View style={styles.titleRow}>
+        <View style={styles.titleText}>
+          <Text style={styles.eyebrow}>{eyebrow}</Text>
+          <Text style={styles.title}>{dish.name}</Text>
+          {dish.altName !== null && dish.altName !== dish.name ? (
+            <Text style={styles.altName}>also called {dish.altName}</Text>
+          ) : null}
+        </View>
+
+        {/* Beside the name, because that is what it edits and because it is the one action
+            here that should not need scrolling to find. The editor holds the dish's
+            identity, its recipe, and the delete (SPEC §19.4). */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Edit ${dish.name}`}
+          onPress={() => router.push(`/dish/edit/${dish.id}`)}
+          style={({ pressed }) => [styles.editButton, pressed && styles.editPressed]}
+        >
+          <PencilLine size={16} strokeWidth={1.7} color={colors.ink} />
+        </Pressable>
+      </View>
 
       <View style={styles.gaugeBlock}>
         {dish.isAlwaysAvailable ? null : (
@@ -127,16 +144,6 @@ function Body({
       </StatGrid>
 
       <Text style={styles.slots}>{slots}</Text>
-
-      {/* The editor holds the dish's identity as well as its recipe now, so there has to be
-          a way in that is not labelled "recipe" — a name typed wrong during onboarding is
-          otherwise only fixable through a button that says it edits something else. */}
-      <View style={styles.editAction}>
-        <SmallButton
-          label="Edit dish"
-          onPress={() => router.push(`/dish/edit/${dish.id}`)}
-        />
-      </View>
 
       <Text style={styles.heading}>Recipe</Text>
       <Recipe
@@ -212,8 +219,29 @@ const makeStyles = ({ colors, text }: Theme) => ({
     ...text.bodySmall,
     marginTop: space.lg,
   },
-  editAction: {
-    marginTop: space.lg,
+  titleRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: space.lg,
+  },
+  titleText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  editButton: {
+    width: layout.minTouchTarget,
+    height: layout.minTouchTarget,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderWidth: border.thin,
+    borderColor: colors.line,
+    borderRadius: radius.control,
+    backgroundColor: colors.steel1,
+    // Optically level with the title rather than with the eyebrow above it.
+    marginTop: space.md,
+  },
+  editPressed: {
+    backgroundColor: colors.steelPressed,
   },
   notes: {
     ...text.body,

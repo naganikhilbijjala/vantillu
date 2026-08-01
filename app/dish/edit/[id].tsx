@@ -1,7 +1,8 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Trash2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, BackHandler, ScrollView, Text, View } from 'react-native';
+import { Alert, BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackLink } from '../../../src/components/BackLink';
 import { ChipField } from '../../../src/components/ChipField';
@@ -22,13 +23,13 @@ import {
   SLOT_OPTIONS,
   toDishFormInput,
 } from '../../../src/db/dishModel';
-import { createDish, saveDish } from '../../../src/db/queries/dish';
+import { createDish, deleteDish, saveDish } from '../../../src/db/queries/dish';
 import { roleConfigQuery } from '../../../src/db/queries/roles';
 import type { RoleConfigRow } from '../../../src/db/roles';
 import { useDish } from '../../../src/hooks/useDishes';
 import { useKeyboardInset } from '../../../src/hooks/useKeyboardInset';
-import { layout, space, type Theme } from '../../../src/theme/tokens';
-import { useThemedStyles } from '../../../src/theme/useTheme';
+import { border, layout, radius, space, type Theme } from '../../../src/theme/tokens';
+import { useTheme, useThemedStyles } from '../../../src/theme/useTheme';
 
 /**
  * The dish editor: who the dish is, how you make it, and what is always true about it.
@@ -89,12 +90,20 @@ export default function EditDish() {
           dishId={isNew ? undefined : dish?.id}
           saved={saved}
           roles={roles}
+          cookCount={dish?.cookCount ?? 0}
           onCancel={() => router.back()}
           onSaved={(dishId) =>
             // `replace`, not `push`: after adding a dish you want to be looking at it, and
             // the way back should be the list rather than the form you just left.
             isNew ? router.replace(`/dish/${dishId}`) : router.back()
           }
+          onDeleted={() => {
+            // Not `back()`: that lands on the detail screen of a dish that no longer
+            // exists, which handles it gracefully but reads as the delete having failed.
+            // All the way out to the list, which is where the dish visibly disappears.
+            if (router.canDismiss()) router.dismissAll();
+            else router.replace('/dishes');
+          }}
         />
       )}
     </SafeAreaView>
@@ -115,17 +124,23 @@ function DishForm({
   dishId,
   saved,
   roles,
+  cookCount,
   onCancel,
   onSaved,
+  onDeleted,
 }: {
   /** Undefined for a dish that does not exist yet — which is what makes this the add form. */
   dishId: string | undefined;
   saved: DishFormValues;
   roles: readonly RoleConfigRow[];
+  /** How much history deleting would take with it. Named in the confirmation. */
+  cookCount: number;
   onCancel: () => void;
   onSaved: (dishId: string) => void;
+  onDeleted: () => void;
 }) {
   const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
   const isNew = dishId === undefined;
 
   const [input, setInput] = useState<DishFormInput>(() => toDishFormInput(saved));
@@ -228,6 +243,35 @@ function DishForm({
     // No invalidation: `useLiveQuery` re-runs on the write, so the screen behind has the
     // new text before this one finishes popping.
     onSaved(dishId);
+  }
+
+  /**
+   * Deleting, behind a confirmation that says what it costs.
+   *
+   * This is the one action in the app that destroys history, so the count goes in the
+   * message rather than being left for the user to remember. Soft underneath (SPEC §11.3),
+   * but "recoverable by editing the database" is not something to offer as reassurance —
+   * from in here it is gone.
+   */
+  function confirmDelete() {
+    if (dishId === undefined) return;
+    Alert.alert(
+      `Delete ${saved.name}?`,
+      cookCount === 0
+        ? "Nothing has been logged against it, so there's no history to lose. This can't be undone."
+        : `This also removes ${cookCount} logged ${cookCount === 1 ? 'cook' : 'cooks'} and any notes on them. This can't be undone.`,
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteDish(dishId);
+            onDeleted();
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -404,6 +448,22 @@ function DishForm({
         />
         <GhostButton label="Cancel" onPress={guardedExit} />
       </View>
+
+      {/* Below Cancel and below a rule, because a destructive action should never sit
+          where a thumb aiming for Save might land. Absent on the add form: there is
+          nothing to delete, and "Cancel" already means "never mind". */}
+      {isNew ? null : (
+        <View style={styles.danger}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={confirmDelete}
+            style={({ pressed }) => [styles.deleteButton, pressed && styles.rowPressed]}
+          >
+            <Trash2 size={15} strokeWidth={1.7} color={colors.gongura} />
+            <Text style={styles.deleteLabel}>Delete this dish</Text>
+          </Pressable>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -455,6 +515,30 @@ const makeStyles = ({ colors, text }: Theme) => ({
   problems: {
     ...text.bodySmall,
     color: colors.ink2,
+  },
+  danger: {
+    marginTop: space.xxl,
+    paddingTop: space.xl,
+    borderTopWidth: border.hairline,
+    borderTopColor: colors.lineSoft,
+    alignItems: 'center' as const,
+  },
+  deleteButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: space.md,
+    minHeight: layout.minTouchTarget,
+    paddingHorizontal: space.xl,
+    borderRadius: radius.button,
+  },
+  rowPressed: {
+    backgroundColor: colors.steel1,
+  },
+  deleteLabel: {
+    ...text.control,
+    fontSize: 13,
+    color: colors.gongura,
   },
   error: {
     ...text.bodySmall,

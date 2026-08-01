@@ -3,7 +3,7 @@ import { randomUUID } from 'expo-crypto';
 import type { Slot } from '../../core/types';
 import { db } from '../client';
 import { type DishFormInput, toDishUpdate, toNewDishRow } from '../dishModel';
-import { dish, dishSlot } from '../schema';
+import { cookEvent, dish, dishSlot } from '../schema';
 import { toLocalIso } from '../time';
 
 /**
@@ -83,5 +83,41 @@ export function saveDish(dishId: string, input: DishFormInput, now = new Date())
       .where(and(eq(dish.id, dishId), isNull(dish.deletedAt)))
       .run();
     replaceSlots(tx, dishId, input.slots, at);
+  });
+}
+
+/**
+ * Remove a dish, its slots, and its cook history.
+ *
+ * **A soft delete**, like every delete in the app that is not a dev-tools reset: the rows
+ * keep their tombstones so a future merge cannot resurrect something removed on purpose,
+ * and so the Phase 10 export can ship them (`docs/SPEC.md` §11.3).
+ *
+ * **The cook events go too.** They are already invisible once the dish is gone — `groupEvents`
+ * drops any event whose dish it does not know — but leaving them untombstoned would ship a
+ * pile of rows pointing at a deleted dish in the first export, which is the exact shape of
+ * data that makes a later merge resurrect things. If the dish is gone, so is the claim that
+ * you cooked it.
+ *
+ * That is also why the confirmation says how many cooks are about to go with it. This is the
+ * one action in the app that destroys history, and it must not be able to do so quietly.
+ */
+export function deleteDish(dishId: string, now = new Date()): void {
+  const at = toLocalIso(now);
+  const tombstone = { deletedAt: at, updatedAt: at };
+
+  db.transaction((tx) => {
+    tx.update(cookEvent)
+      .set(tombstone)
+      .where(and(eq(cookEvent.dishId, dishId), isNull(cookEvent.deletedAt)))
+      .run();
+    tx.update(dishSlot)
+      .set(tombstone)
+      .where(and(eq(dishSlot.dishId, dishId), isNull(dishSlot.deletedAt)))
+      .run();
+    tx.update(dish)
+      .set(tombstone)
+      .where(and(eq(dish.id, dishId), isNull(dish.deletedAt)))
+      .run();
   });
 }

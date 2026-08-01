@@ -4,9 +4,13 @@ import { radius, type Theme } from '../theme/tokens';
 import { useTheme, useThemedStyles } from '../theme/useTheme';
 
 /**
- * Log a cook. One tap from the Today screen, and nothing may ever be added to that path
- * (hard rule 6) — which is why it floats over the list rather than living at the bottom of
- * it, where a long repertoire would push it off screen.
+ * Add the thing this tab is about: a cook on Today, a dish on Dishes.
+ *
+ * One glyph, two meanings, and they stay unambiguous because each tab has exactly one thing
+ * worth adding. On Today that is hard rule 6 — logging is one tap and nothing may ever be
+ * added to that path, which is why it floats over the list rather than sitting at the bottom
+ * of it where a long repertoire would push it off screen. On Dishes the same reasoning
+ * applies to a repertoire being typed in one dish at a time (`docs/SPEC.md` §19.4).
  *
  * `elevation.float` sets both the Android and the iOS half of the shadow. A bare
  * `elevation` or a bare `shadowOffset` would silently give one platform nothing.

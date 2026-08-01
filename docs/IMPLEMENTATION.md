@@ -589,10 +589,15 @@ first launch inserted all sixty-eight. Once the seed became a list you pick from
 and once the list stopped being pre-ticked the editor became the **primary** way a repertoire
 gets built rather than a fallback. So
 `dish/edit/[id].tsx` widened to the "add/edit dish + recipe" that §3 always sketched, with
-`id = new` for a dish that does not exist yet. SPEC §19 has the field list and the two
-required fields; the short version is that a dish with no meal slot fails a *silent*
-eligibility filter and is invisible forever, so that is the one thing besides a name the form
-will not let you skip.
+`id = new` for a dish that does not exist yet, and a soft delete at the bottom of it. SPEC
+§19 has the field list and the two required fields; the short version is that a dish with no
+meal slot fails a *silent* eligibility filter and is invisible forever, so that is the one
+thing besides a name the form will not let you skip.
+
+Adding is a **FAB on the Dishes tab**, matching Today's — each tab has exactly one thing
+worth adding, so one glyph carries both. It was a small button in the header first, which
+was wrong twice over: the header says what a screen is rather than what to do on it, and a
+text button up there reads as incidental beside a full-screen list.
 
 ### Phase 9 — prep notifications
 `expo-notifications`, local only. Schedule a nudge `prepLeadHours` before the dish's

@@ -1134,22 +1134,51 @@ that invisible dish from §19.1.
 
 ### 19.4 Where you reach it
 
-Three entry points, all of which existed as dead ends before:
+- **A FAB on the Dishes tab.** Adding a dish is what that tab is *for* now that the starter
+  list is optional (§18.1), so it gets the same treatment Today gives logging: floating,
+  thumb height, never scrolled off by a long list. One glyph, two meanings across the two
+  tabs — add a cook here, add a dish there — which stays unambiguous because each tab has
+  exactly one thing worth adding.
 
-- **Dishes tab header — "Add a dish".** The screen that answers *what do I cook* is where
-  you say what you cook. Not Today, whose FAB already means something else.
+  It was a small bordered button in the header first. Wrong twice over: the header is where
+  you read what a screen is, not where you act on it, and a text button up there reads as
+  incidental next to a list that fills the screen.
 - **The dishes list's empty state**, which invited an action that did not exist. Only when
   the list is genuinely empty, not when a filter emptied it — the move there is to clear the
   filter, which is already on screen.
-- **The detail screen — "Edit dish"**, next to the meal slots. The Recipe section's own
-  button still goes to the same place, but a name typed wrong needs a way in that is not
-  labelled "recipe".
+- **A pencil beside the dish's name on the detail screen.** Beside the name because that is
+  what it edits, and because it is the one action there that should not need scrolling to
+  find. The Recipe section's own button still goes to the same place.
 
-### 19.5 What it deliberately does not do
+### 19.5 Deleting
 
-- **No delete.** Soft deletes are wired through the schema (§11.3) and nothing exposes them.
-  Archiving is the better answer for "I don't make this any more" — it keeps the history that
-  is the whole point of the app — and neither has a UI yet. A product decision, not a task.
+**A soft delete of the dish, its slots, and its cook events**, from the bottom of the editor,
+behind a confirmation that names the dish and says how many logged cooks go with it.
+
+The cook events go too. They are already invisible once the dish is gone — `groupEvents`
+drops any event whose dish it does not know — but leaving them untombstoned would ship rows
+pointing at a deleted dish in the first export, which is the exact shape of data that makes a
+later merge resurrect things (§11.3). If the dish is gone, so is the claim that you cooked it.
+
+Three details that are the difference between a delete and a trap:
+
+- **The count is in the confirmation**, not left for the user to remember. This is the one
+  action in the app that destroys history and it must not be able to do so quietly.
+- **It sits below Cancel, below a rule**, never where a thumb aiming for Save might land.
+- **It exits to the list**, not back to the detail screen of a dish that no longer exists.
+  That screen handles the miss gracefully, which is precisely the problem — it would read as
+  the delete having failed.
+
+Absent on the add form: there is nothing to delete, and Cancel already means "never mind".
+
+**Archiving is still not exposed**, and `dish.is_archived` still has no UI. It remains the
+better answer for "I don't make this any more" because it keeps the history, and it is worth
+adding the day someone wants that. Delete is the right primitive for the mistakes a
+hand-typed repertoire actually accumulates — a typo, a duplicate, a dish added and never
+cooked — which is why it came first.
+
+### 19.6 What it deliberately does not do
+
 - **No re-import from the starter list.** A seed dish not taken during onboarding is
   addable by typing it in, which is the same work as any other new dish — and adding your
   own dishes is the normal path now (§18.1), not the fallback. A "browse the suggestions"
